@@ -342,10 +342,10 @@ console_log :: proc"c"(category: log_category, format: string, args: ..any, modu
     fmt.sbprintfln(&message, format, ..args)
 
     fmt.fprint(os.stderr, strings.to_string(message))
-    if os.is_file_handle(log_file){
-        fmt.fprint(log_file, strings.to_string(message))
-    }
-
+//    if os.is_file_handle(log_file){
+//        fmt.fprint(log_file, strings.to_string(message))
+//    }
+    
 }
 @private 
 c_console_log :: proc"c"(category: log_category, text: cstring){
@@ -491,7 +491,6 @@ main :: proc() {
         defer delete(mod_listings)
         console_log(.INFO, "%i mods found", len(mod_listings))
 
-
         for listed_mod in mod_listings{
             mod_path := strings.concatenate([] string{cwd, "/", mod_directory_path, "/", listed_mod.name, "/", listed_mod.name, ".",dynlib.LIBRARY_FILE_EXTENSION})
             if(!os.exists(mod_path)){
@@ -507,7 +506,11 @@ main :: proc() {
 
             mod_path := strings.concatenate([] string{cwd, "/", mod_directory_path, "/", listed_mod.name, "/", listed_mod.name, ".",dynlib.LIBRARY_FILE_EXTENSION})
             
-            //when ODIN_OS == .Windows{windows.SetDllDirectoryW()}
+            when ODIN_OS == .Windows{
+                dll_directory := strings.concatenate([] string{cwd, "/", mod_directory_path, "/", listed_mod.name})
+                windows.SetDllDirectoryW(windows.utf8_to_wstring(dll_directory))
+                console_log(.INFO, "DLL directory: %s", dll_directory)
+            }
 
             mod_lib, ok := dynlib.load_library(mod_path)
             if !ok{
@@ -533,8 +536,3 @@ main :: proc() {
         }
     }
 }
-
-
-
-
-
