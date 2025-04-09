@@ -62,12 +62,11 @@ start :: proc"c"(core : ^slate.core_interface){
 
     gl.load_up_to(3, 3, sdl2.gl_set_proc_address)
     // core.log(.INFO, "loaded OpenGL version %s", strings.clone_from_cstring(gl.GetString(gl.VERSION)))
-    // core.log(.INFO, "vendor: %s", strings.clone_from_cstring(gl.GetString(gl.VENDOR)))
+    // core.log(.INFO, "vendor: %s", strings.clone_from_cstrisng(gl.GetString(gl.VENDOR)))
 }
 
 input :: proc"c"(core : ^slate.core_interface){ 
     event: sdl2.Event
-        
     for ;sdl2.PollEvent(&event);{
         if event.type == sdl2.EventType.QUIT {
             sdl2.GL_DeleteContext(gl_context)
