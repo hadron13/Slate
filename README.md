@@ -4,7 +4,7 @@ Modular multithreaded game engine
 ## Compiling
 
 ### Requirements
-- Odin Compiler
+- [Odin Compiler](https://odin-lang.org/docs/install/)
 ### Windows
 ```cmd
   ./build.bat
