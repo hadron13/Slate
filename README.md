@@ -6,6 +6,7 @@ Modular multithreaded game engine
 ### Requirements
 - [Odin Compiler](https://odin-lang.org/docs/install/)
 ### Windows
+_optionally you can use the [quick setup](https://github.com/hadron13/Slate/quick_setup.bat) script to download the Odin compiler using **curl**_
 ```cmd
   ./build.bat
 ```
