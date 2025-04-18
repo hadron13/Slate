@@ -1,5 +1,5 @@
 # Slate
-Modular multithreaded game engine
+a Minmalist Modular multithreaded game engine
 
 ## Compiling
 
