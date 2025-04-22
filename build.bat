@@ -3,13 +3,18 @@ mkdir mods\render
 odin build render -out:mods/render/render.dll -build-mode:shared -debug
 odin build slate -out:slate.exe -debug
 
+set SDL2_DEST=mods\render\SDL2.dll
 
-IF NOT EXISTS mods\render\SDL2.dll (
-    echo SDL2.dll not found, copying from Odin directory
-    FOR /F "tokens=*" %%g IN ('where odin') do (SET SUBDIR=%%g)
-    SET ODIN_PATH=%SUBDIR:~0,-8%
-    SET SDL2_DIR="vendor\sdl2\SDL2.dll"
-    SET SDL2_PATH=%ODIN_PATH%%SDL2_DIR%
-    echo %SDL2_PATH%
-    copy %SDL2_PATH% mods\render\SDL2.dll
+:: Check if SDL2.dll exists in destination
+if exist "%SDL2_DEST%" (
+    exit /b 0
 )
+
+:: Get Odin path and construct SDL2 source path
+for /f "delims=" %%i in ('where odin') do (
+    set ODIN_PATH=%%i
+    set SDL2_SRC=%%~dpivendor\sdl2\SDL2.dll
+    goto :copy
+)
+:copy
+copy "%SDL2_SRC%" "%SDL2_DEST%"
