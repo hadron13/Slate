@@ -90,11 +90,13 @@ core_interface :: struct{
     config_get_string   : proc"c"(key : string, default : string = "") -> string,
     config_get_bool     : proc"c"(key : string, default : b8 = false) -> b8,
     //LOGGING   
-    log         : proc"c"(category: log_category, format: string, args: ..any, module := MODULE, location := #caller_location),
+    log_lock            : ^sync.Mutex
+    // log         : proc"c"(category: log_category, format: string, args: ..any, module := MODULE, location := #caller_location),
     c_log       : proc"c"(category: log_category, text: cstring),
     //MODULES
     module_interface    : proc"c"(name: string) -> module_interface,
     module_version      : proc"c"(name: string) -> version,
+    // module_register_interface : proc"c"(name: string, interface: module_interface),
     //TASKS
     task_add_pool       : proc"c"(name: string, threads: u32),
     task_add_repeated   : proc"c"(name: string, pool: string, task: task_proc,  dependencies: []string),
@@ -306,11 +308,10 @@ config_parse :: proc(text : string) {
     config_set({key, value_string})
 } 
 
-log_mutex : sync.Mutex
+log_lock: sync.Mutex
 log_file  : os.Handle
 
-@private
-console_log :: proc"c"(category: log_category, format: string, args: ..any, module := MODULE, location := #caller_location) {
+console_log :: proc"c"(core: ^core_interface, category: log_category, format: string, args: ..any, module := MODULE, location := #caller_location) {
     if category > log_level{
         return
     }
@@ -328,17 +329,17 @@ console_log :: proc"c"(category: log_category, format: string, args: ..any, modu
       case log_category.CRITICAL:prefix = "[\033[31mCRTCAL\033[0m]["
       case log_category.DEBUG:   prefix = "[\033[35mDEBUG\033[0m] ["
     }
-    sync.guard(&log_mutex)
+    sync.guard(&core.log_lock)
     backing : [256]byte
+    msg_backing : [256]byte
     header := strings.builder_from_bytes(backing[:])
+    message := strings.builder_from_bytes(msg_backing[:])
     
     fmt.sbprint(&header, prefix)
     fmt.sbprintf(&header, "%02i:%02i:%02i] ", hour, min, second);
     fmt.sbprintf(&header, "[\033[34m%s | %s:\033[35m%d \033[93m%s()\033[0m] ", module, location.file_path[len(location.file_path)-20:len(location.file_path)], location.line, location.procedure)
-    fmt.print(strings.to_string(header))
+    fmt.fprint(os.stderr,strings.to_string(header))
     
-    msg_backing : [256]byte
-    message := strings.builder_from_bytes(msg_backing[:])
     fmt.sbprintfln(&message, format, ..args)
 
     fmt.fprint(os.stderr, strings.to_string(message))
@@ -423,7 +424,7 @@ main :: proc() {
         config_get_float,
         config_get_string,
         config_get_bool,
-        console_log,
+        &log_lock,
         c_console_log,
         interface_get,
         nil,

@@ -8,6 +8,10 @@ import "base:runtime"
 import "vendor:sdl2"
 import "vendor:sdl2/image"
 import gl "vendor:OpenGL"
+import "core:fmt"
+import "core:os"
+import "core:sync"
+import "core:time"
 
 
 MODULE :: #config(MOD, "Render")
@@ -61,8 +65,17 @@ start :: proc"c"(core : ^slate.core_interface){
     sdl2.GL_SetSwapInterval(-1)
 
     gl.load_up_to(3, 3, sdl2.gl_set_proc_address)
-    // core.log(.INFO, "loaded OpenGL version %s", strings.clone_from_cstring(gl.GetString(gl.VERSION)))
-    // core.log(.INFO, "vendor: %s", strings.clone_from_cstrisng(gl.GetString(gl.VENDOR)))
+
+    version_string := strings.clone_from_cstring(gl.GetString(gl.VERSION))
+    core.log(.INFO, "loaded OpenGL version %s", "idoso")
+
+    // core.log(.INFO, "vendor: %v", gl.GetString(gl.VENDOR) )
+}
+
+
+my_log :: proc"c"(format : string, args: ..any){
+    context = runtime.default_context()
+    fmt.printf(format, ..args)
 }
 
 input :: proc"c"(core : ^slate.core_interface){ 
