@@ -66,16 +66,8 @@ start :: proc"c"(core : ^slate.core_interface){
 
     gl.load_up_to(3, 3, sdl2.gl_set_proc_address)
 
-    version_string := strings.clone_from_cstring(gl.GetString(gl.VERSION))
-    core.log(.INFO, "loaded OpenGL version %s", "idoso")
-
-    // core.log(.INFO, "vendor: %v", gl.GetString(gl.VENDOR) )
-}
-
-
-my_log :: proc"c"(format : string, args: ..any){
-    context = runtime.default_context()
-    fmt.printf(format, ..args)
+    core.log(.INFO, "loaded OpenGL version %s", gl.GetString(gl.VERSION))
+    core.log(.INFO, "vendor: %s", gl.GetString(gl.VENDOR) )
 }
 
 input :: proc"c"(core : ^slate.core_interface){ 
@@ -97,8 +89,3 @@ render :: proc"c"(core : ^slate.core_interface){
     gl.Clear(gl.COLOR_BUFFER_BIT)
     sdl2.GL_SwapWindow(window)
 }
-
-
-
-
-
