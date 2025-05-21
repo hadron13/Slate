@@ -8,10 +8,7 @@ import "base:runtime"
 import "vendor:sdl2"
 import "vendor:sdl2/image"
 import gl "vendor:OpenGL"
-import "core:fmt"
-import "core:os"
-import "core:sync"
-import "core:time"
+import glm "core:math/linalg/glsl"
 
 
 MODULE :: #config(MOD, "Render")
@@ -60,6 +57,7 @@ render_allocator: runtime.Allocator
 test_vbo : u32 
 test_ebo : u32 
 test_vao : u32
+test_shader : u32
 
 
 start :: proc"c"(core : ^slate.core_interface){
@@ -159,7 +157,11 @@ start :: proc"c"(core : ^slate.core_interface){
     gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * size_of(f32), (5 * size_of(f32)))
     gl.EnableVertexAttribArray(2)
     
-
+    ok : bool
+    test_shader, ok = gl.load_shaders_file("mods/render/shaders/vert.glsl", "mods/render/shaders/frag.glsl")
+    if !ok {
+        core.log(.ERROR, "Could not load the shaders")
+    }
 }
 
 input :: proc"c"(core : ^slate.core_interface){ 
@@ -177,6 +179,9 @@ input :: proc"c"(core : ^slate.core_interface){
 
 render :: proc"c"(core : ^slate.core_interface){
     
+    mvp := glm.mat4Perspective(90, 1.3, 0.1, 100.0)
+    model := glm.identity(matrix[4, 4]f32)
+
     gl.ClearColor(0.1, 0.1, 0.1, 1.0)
     gl.Clear(gl.COLOR_BUFFER_BIT)
     sdl2.GL_SwapWindow(window)
