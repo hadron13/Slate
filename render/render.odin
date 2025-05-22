@@ -28,7 +28,6 @@ shader :: struct{
 }
 
 material :: struct{
-
     ior       : f32,
     metallic  : f32,
     alpha     : f32,
@@ -37,6 +36,26 @@ material :: struct{
     normal       : texture,
     roughness    : texture,
     displacement : texture,
+}
+
+camera :: struct{
+    position : [3]f32,
+    rotation : quaternion128,
+    fov      : f32,
+}
+
+scene :: struct{
+    meshes    : []mesh,
+    textures  : []texture, 
+    materials : []material,
+    //lights
+    camera    : camera
+}
+
+// RENDER API
+render_interface :: struct{ 
+    render_scene : proc (scene : scene),
+    mesh_create  : proc () -> mesh 
 }
 
 
@@ -58,6 +77,7 @@ test_vbo : u32
 test_ebo : u32 
 test_vao : u32
 test_shader : u32
+test_shader_uniforms : map[string]gl.Uniform_Info
 
 
 start :: proc"c"(core : ^slate.core_interface){
@@ -162,6 +182,8 @@ start :: proc"c"(core : ^slate.core_interface){
     if !ok {
         core.log(.ERROR, "Could not load the shaders")
     }
+    gl.UseProgram(test_shader)
+    test_shader_uniforms = gl.get_uniforms_from_program(test_shader)
 }
 
 input :: proc"c"(core : ^slate.core_interface){ 
@@ -179,8 +201,15 @@ input :: proc"c"(core : ^slate.core_interface){
 
 render :: proc"c"(core : ^slate.core_interface){
     
-    mvp := glm.mat4Perspective(90, 1.3, 0.1, 100.0)
     model := glm.identity(matrix[4, 4]f32)
+    mvp := glm.mat4Perspective(90, 1.3, 0.1, 100.0) * model
+
+    gl.UseProgram(test_shader)
+    gl.UniformMatrix4fv(test_shader_uniforms["mvp"].location, 1, false, &mvp[0, 0])
+    gl.UniformMatrix4fv(test_shader_uniforms["model"].location, 1, false, &model[0, 0])
+    
+    gl.BindVertexArray(test_vao)
+    gl.DrawElements(gl.TRIANGLES, 36, gl.UNSIGNED_INT, nil)
 
     gl.ClearColor(0.1, 0.1, 0.1, 1.0)
     gl.Clear(gl.COLOR_BUFFER_BIT)
