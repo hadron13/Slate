@@ -1,5 +1,5 @@
 # Slate
-A Minimalist Modular Game Engine written in [Odin](https://odin-lang.org)
+A Minimalist Modular Game Engine written in [Odin](https://odin-lang.org), heavily inspired in the deceived Our Machinery engine.
 
 ## Compiling
 
