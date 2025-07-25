@@ -41,7 +41,6 @@ module_interface :: distinct rawptr
 module :: struct{
     name              : string,
     module_version    : version,
-    interface_version : version,
     interface         : module_interface,
     library           : dynlib.Library,
     dependencies      : []string,
@@ -93,14 +92,17 @@ core_interface :: struct{
     log         : proc"c"(category: log_category, format: string, args: ..any, module := MODULE, location := #caller_location),
     c_log       : proc"c"(category: log_category, text: cstring),
     //MODULES
-    module_interface    : proc"c"(name: string) -> module_interface,
-    module_version      : proc"c"(name: string) -> version,
+    module_set_interface: proc"c"(name: string, interface: module_interface),  
+    module_set_version  : proc"c"(name: string, version : version),            
+    module_get_interface: proc"c"(name: string) -> module_interface,      
+    module_get_version  : proc"c"(name: string) -> version,             
+    module_reload       : proc"c"(name: string), // hot-reloads module, optionally calling a reload() procedure   
     //TASKS
     task_add_pool       : proc"c"(name: string, threads: u32),
     task_add_repeated   : proc"c"(name: string, pool: string, task: task_proc,  dependencies: []string),
     task_add_once       : proc"c"(name: string, pool: string, task: task_proc,  dependencies: []string),
     //MISC 
-    quit: proc"c"(status: int)
+    quit                : proc"c"(status: int) 
 }
 
 
@@ -143,7 +145,10 @@ main :: proc() {
         config_get_bool,
         console_log,
         c_console_log,
+        interface_set,
+        version_set,
         interface_get,
+        version_get,
         nil,
         task_add_pool,
         task_add_repeated,
@@ -156,8 +161,6 @@ main :: proc() {
     task_add_pool("main", u32(os.processor_core_count()/2))
     
     cwd := os.get_current_directory()
-    
-    console_log(.DEBUG, "%s", cwd)
     
     console_log(.INFO, "loading configs")
     {
@@ -516,9 +519,28 @@ c_console_log :: proc"c"(category: log_category, text: cstring){
 }
 
 @private
+interface_set :: proc"c"(name : string, interface: module_interface){
+    if value, ok := &modules[name]; ok { 
+        value.interface = interface
+    }
+}
+@private
+version_set :: proc"c"(name : string, version: version){
+    if value, ok := &modules[name]; ok { 
+        value.module_version = version
+    }
+}
+
+@private
 interface_get :: proc"c"(name : string) -> module_interface{
     return modules[name].interface
 }
+
+@private
+version_get :: proc"c"(name : string) -> version{
+    return modules[name].module_version
+}
+
 
 @private
 code_inject :: proc"c"(file: os.Handle, offset: i64 , padding: int, procedure: uintptr){
@@ -538,8 +560,34 @@ code_inject :: proc"c"(file: os.Handle, offset: i64 , padding: int, procedure: u
         os.write_byte(file, 0x90)   
     } 
 }
+
 @private
 quit :: proc"c"(status: int){ 
+
+    console_log(.INFO, "saving configuration...")
+    {
+        context = runtime.default_context()
+
+
+        config_file, error := os.open("config.txt", os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0o777)
+
+
+        if error == os.ERROR_NONE{
+            for key in configuration{
+                config := configuration[key]
+                switch c in config.value{
+                    case i64:    fmt.fprintfln(config_file, "%s=%l", key, c)
+                    case b8:     fmt.fprintfln(config_file, "%s=%b", key, c)
+                    case f64:    fmt.fprintfln(config_file, "%s=%f", key, c)
+                    case string: fmt.fprintfln(config_file, "%s=%s", key, c)
+                }
+            }
+            os.close(config_file)
+        }else{
+            console_log(.ERROR, "could not open config.txt file, %i", os.get_last_error())
+        }
+    }
+
     os.exit(status)        
 }
 

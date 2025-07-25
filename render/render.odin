@@ -57,6 +57,8 @@ scene :: struct{
 
 // RENDER API
 render_interface :: struct{ 
+    size : u64,
+    version : slate.version,
     render_scene : proc (scene : scene),
     mesh_create  : proc () -> mesh 
 }
@@ -69,6 +71,8 @@ load :: proc"c"(core : ^slate.core_interface){
     core.task_add_once("render/start", "render", start, nil)
     core.task_add_repeated("render/input", "render", input, {"render/start"})
     core.task_add_repeated("render/render", "render", render, {"render/input"})
+
+    core.module_set_version("render", {0, 0, 1})
 }
 
 window : ^sdl2.Window
