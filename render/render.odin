@@ -19,7 +19,7 @@ import "../slate"
 
 
 mesh :: struct{
-    
+    VAO: u32,
 }
 
 texture :: struct{
@@ -117,7 +117,9 @@ start :: proc"c"(core : ^slate.core_interface){
     core.log(.INFO, "vendor: %s", gl.GetString(gl.VENDOR) )
 
     gl.Enable(gl.DEPTH_TEST)
-    gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
+    gl.Enable(gl.CULL_FACE)
+    gl.CullFace(gl.FRONT)
+    // gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 
     ok : bool
     test_shader, ok = gl.load_shaders_file("mods/render/shaders/vert.glsl", "mods/render/shaders/frag.glsl")
@@ -201,11 +203,12 @@ start :: proc"c"(core : ^slate.core_interface){
 input :: proc"c"(core : ^slate.core_interface){ 
     event: sdl2.Event
     for ;sdl2.PollEvent(&event);{
-        if event.type == sdl2.EventType.QUIT {
-            sdl2.GL_DeleteContext(gl_context)
-            sdl2.DestroyWindow(window)
-            sdl2.Quit()
-            core.quit(0)
+        #partial switch(event.type){
+            case .QUIT:
+                sdl2.GL_DeleteContext(gl_context)
+                sdl2.DestroyWindow(window)
+                sdl2.Quit()
+                core.quit(0)
         }
     }
 }
@@ -215,15 +218,14 @@ render :: proc"c"(core : ^slate.core_interface){
     gl.ClearColor(0.4, 0.1, 0.3, 1.0)
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
    
-    t := f32(time.tick_now()._nsec)/1000000000.0
+    t : f32 = cast(f32)sdl2.GetTicks()/1000.0
 
     projection := glm.mat4PerspectiveInfinite(90, 800/640, 0.01)
     view := glm.identity(glm.mat4)
     model := glm.mat4Translate(glm.vec3{0.0, 0.0, -4.0}) * glm.mat4Rotate(glm.vec3{0, 1.0, 0}, t)
     
-
     gl.UseProgram(test_shader)
-    gl.Uniform1f(test_shader_uniforms["t"].location, t)
+    // gl.Uniform1f(test_shader_uniforms["t"].location, t)
     gl.UniformMatrix4fv(test_shader_uniforms["proj"].location, 1, gl.FALSE, &projection[0,0])
     gl.UniformMatrix4fv(test_shader_uniforms["view"].location, 1, gl.FALSE, &view[0,0])
     gl.UniformMatrix4fv(test_shader_uniforms["model"].location, 1, gl.FALSE, &model[0,0])

@@ -116,6 +116,146 @@ log_level     : log_category
 @private
 interface     : core_interface
 
+
+@private
+main :: proc() {
+    log_level = .DEBUG
+    
+
+    when ODIN_DEBUG{
+        track: mem.Tracking_Allocator
+        mem.tracking_allocator_init(&track, context.allocator)
+        context.allocator = mem.tracking_allocator(&track)
+    }
+
+    when ODIN_OPTIMIZATION_MODE == .Speed || ODIN_OPTIMIZATION_MODE == .Aggressive{
+        config_set({"log_level", "WARNING"})
+    }
+
+    interface = (core_interface){
+        size_of(core_interface),
+        {0, 0, 2},
+        config_set,
+        config_get,
+        config_get_int,
+        config_get_float,
+        config_get_string,
+        config_get_bool,
+        console_log,
+        c_console_log,
+        interface_get,
+        nil,
+        task_add_pool,
+        task_add_repeated,
+        task_add_once,
+        quit,
+    }
+
+    console_log(.INFO, "starting")
+    
+    task_add_pool("main", u32(os.processor_core_count()/2))
+    
+    cwd := os.get_current_directory()
+    
+    console_log(.DEBUG, "%s", cwd)
+    
+    console_log(.INFO, "loading configs")
+    {
+        config_file, ok := os.read_entire_file("config.txt")
+        if ok{
+            defer delete(config_file)
+            iterator := string(config_file)
+
+            for config in strings.split_lines_iterator(&iterator){
+                config_parse(config)
+            }
+        }
+        for arg in os.args{
+            if arg[0] == '-' && strings.contains_rune(arg, '=') {
+                console_log(.DEBUG, "%s", arg[1:])
+                config_parse(arg[1:])
+            }
+        }
+    }
+
+    switch(config_get_string("log_level", "")){
+        case "VERBOSE": log_level = .VERBOSE 
+        case "INFO":    log_level = .INFO    
+        case "WARNING": log_level = .WARNING 
+        case "ERROR":   log_level = .ERROR   
+        case "CRITICAL":log_level = .CRITICAL
+        case: config_set({"log_level", "DEBUG"})
+    }
+    console_log(.INFO, "log level set to: %s", config_get_string("log_level"))
+
+    console_log(.INFO, "loading mods...") 
+    {
+        mod_directory_path := config_get_string("mod_directory", "mods")
+        mod_directory : os.Handle
+        err : os.Error
+
+        if mod_directory, err = os.open(mod_directory_path); err != nil{
+            console_log(.ERROR, "could not open mods directory: %s", os.error_string(err))
+            return 
+        }
+        defer os.close(mod_directory)
+
+
+        mod_listings: []os.File_Info
+        if mod_listings, err = os.read_dir(mod_directory, 512); err != nil{
+            console_log(.ERROR, "could not list mods: %s", os.error_string(err))
+            return 
+        }
+        defer delete(mod_listings)
+        console_log(.INFO, "%i mods found", len(mod_listings))
+
+        for listed_mod in mod_listings{
+            mod_path := strings.concatenate([] string{cwd, "/", mod_directory_path, "/", listed_mod.name, "/", listed_mod.name, ".",dynlib.LIBRARY_FILE_EXTENSION})
+            if(!os.exists(mod_path)){
+                continue
+            }
+            //when ODIN_OS == .Windows{windows.SetDllDirectoryW()} //TODO add proper parameters
+            
+            injection_lib, ok := dynlib.load_library(mod_path) // TODO: code injection support 
+        }
+
+        for listed_mod in mod_listings{    
+            console_log(.INFO, "loading module '%s'", listed_mod.name)
+
+            mod_path := strings.concatenate([] string{cwd, "/", mod_directory_path, "/", listed_mod.name, "/", listed_mod.name, ".",dynlib.LIBRARY_FILE_EXTENSION})
+            
+            when ODIN_OS == .Windows{
+                dll_directory := strings.concatenate([] string{cwd, "/", mod_directory_path, "/", listed_mod.name})
+                windows.SetDllDirectoryW(windows.utf8_to_wstring(dll_directory))
+                console_log(.INFO, "DLL directory: %s", dll_directory)
+            }
+
+            mod_lib, ok := dynlib.load_library(mod_path)
+            if !ok{
+                console_log(.ERROR, "Library loading error with mod at %s: %s", mod_path, dynlib.last_error())
+                continue 
+            }
+            
+            load_ptr, found := dynlib.symbol_address(mod_lib, "load")
+            if !found{
+                console_log(.ERROR, "Load procedure not found at %s", mod_path)
+                continue
+            }
+        
+            load_proc := cast(proc"c"(^core_interface)) load_ptr
+            load_proc(&interface)
+        }
+    }
+    task_runner_thread(&task_pools["main"])
+
+    when ODIN_DEBUG{
+        for _, leak in track.allocation_map {
+            console_log(.DEBUG,"%v leaked %m\n", leak.location, leak.size)
+        }
+    }
+}
+
+
 @private
 task_add_pool :: proc"c"(name: string, threads: u32){
     context = runtime.default_context()
@@ -331,10 +471,13 @@ console_log :: proc"c"(category: log_category, format: string, args: ..any, modu
     sync.guard(&log_mutex)
     backing : [256]byte
     header := strings.builder_from_bytes(backing[:])
-    
+   
+    path_len := len(location.file_path)
+    source_path := location.file_path[strings.last_index(location.file_path[0:path_len-20], "/"):]
+
     fmt.sbprint(&header, prefix)
     fmt.sbprintf(&header, "%02i:%02i:%02i] ", hour, min, second);
-    fmt.sbprintf(&header, "[\033[34m%s | %s:\033[35m%d \033[93m%s()\033[0m] ", module, location.file_path[len(location.file_path)-20:len(location.file_path)], location.line, location.procedure)
+    fmt.sbprintf(&header, "[\033[34m%s | %s:\033[35m%d \033[93m%s()\033[0m] ", module, source_path , location.line, location.procedure)
     fmt.print(strings.to_string(header))
     
     msg_backing : [256]byte
@@ -400,139 +543,4 @@ quit :: proc"c"(status: int){
     os.exit(status)        
 }
 
-@private
-main :: proc() {
-    log_level = .DEBUG
-    
-    when ODIN_DEBUG{
-        track: mem.Tracking_Allocator
-        mem.tracking_allocator_init(&track, context.allocator)
-        context.allocator = mem.tracking_allocator(&track)
-    }
 
-    when ODIN_OPTIMIZATION_MODE == .Speed || ODIN_OPTIMIZATION_MODE == .Aggressive{
-        config_set({"log_level", "WARNING"})
-    }
-
-    interface = (core_interface){
-        size_of(core_interface),
-        {0, 0, 2},
-        config_set,
-        config_get,
-        config_get_int,
-        config_get_float,
-        config_get_string,
-        config_get_bool,
-        console_log,
-        c_console_log,
-        interface_get,
-        nil,
-        task_add_pool,
-        task_add_repeated,
-        task_add_once,
-        quit,
-    }
-
-    console_log(.INFO, "starting")
-    
-    task_add_pool("main", u32(os.processor_core_count()/2))
-    
-    cwd := os.get_current_directory()
-    
-    console_log(.DEBUG, "%s", cwd)
-    
-    console_log(.INFO, "loading configs")
-    {
-        config_file, ok := os.read_entire_file("config.txt")
-        if ok{
-            defer delete(config_file)
-            iterator := string(config_file)
-
-            for config in strings.split_lines_iterator(&iterator){
-                config_parse(config)
-            }
-        }
-        for arg in os.args{
-            if arg[0] == '-' && strings.contains_rune(arg, '=') {
-                console_log(.DEBUG, "%s", arg[1:])
-                config_parse(arg[1:])
-            }
-        }
-    }
-
-    switch(config_get_string("log_level", "")){
-        case "VERBOSE": log_level = .VERBOSE 
-        case "INFO":    log_level = .INFO    
-        case "WARNING": log_level = .WARNING 
-        case "ERROR":   log_level = .ERROR   
-        case "CRITICAL":log_level = .CRITICAL
-        case: config_set({"log_level", "DEBUG"})
-    }
-    console_log(.INFO, "log level set to: %s", config_get_string("log_level"))
-
-    console_log(.INFO, "loading mods...") 
-    {
-        mod_directory_path := config_get_string("mod_directory", "mods")
-        mod_directory : os.Handle
-        err : os.Error
-
-        if mod_directory, err = os.open(mod_directory_path); err != nil{
-            console_log(.ERROR, "could not open mods directory: %s", os.error_string(err))
-            return 
-        }
-        defer os.close(mod_directory)
-
-
-        mod_listings: []os.File_Info
-        if mod_listings, err = os.read_dir(mod_directory, 512); err != nil{
-            console_log(.ERROR, "could not list mods: %s", os.error_string(err))
-            return 
-        }
-        defer delete(mod_listings)
-        console_log(.INFO, "%i mods found", len(mod_listings))
-
-        for listed_mod in mod_listings{
-            mod_path := strings.concatenate([] string{cwd, "/", mod_directory_path, "/", listed_mod.name, "/", listed_mod.name, ".",dynlib.LIBRARY_FILE_EXTENSION})
-            if(!os.exists(mod_path)){
-                continue
-            }
-            //when ODIN_OS == .Windows{windows.SetDllDirectoryW()} //TODO add proper parameters
-            
-            injection_lib, ok := dynlib.load_library(mod_path) // TODO: code injection support 
-        }
-
-        for listed_mod in mod_listings{    
-            console_log(.INFO, "loading module '%s'", listed_mod.name)
-
-            mod_path := strings.concatenate([] string{cwd, "/", mod_directory_path, "/", listed_mod.name, "/", listed_mod.name, ".",dynlib.LIBRARY_FILE_EXTENSION})
-            
-            when ODIN_OS == .Windows{
-                dll_directory := strings.concatenate([] string{cwd, "/", mod_directory_path, "/", listed_mod.name})
-                windows.SetDllDirectoryW(windows.utf8_to_wstring(dll_directory))
-                console_log(.INFO, "DLL directory: %s", dll_directory)
-            }
-
-            mod_lib, ok := dynlib.load_library(mod_path)
-            if !ok{
-                console_log(.ERROR, "Library loading error with mod at %s: %s", mod_path, dynlib.last_error())
-                continue 
-            }
-            
-            load_ptr, found := dynlib.symbol_address(mod_lib, "load")
-            if !found{
-                console_log(.ERROR, "Load procedure not found at %s", mod_path)
-                continue
-            }
-        
-            load_proc := cast(proc"c"(^core_interface)) load_ptr
-            load_proc(&interface)
-        }
-    }
-    task_runner_thread(&task_pools["main"])
-
-    when ODIN_DEBUG{
-        for _, leak in track.allocation_map {
-            console_log(.DEBUG,"%v leaked %m\n", leak.location, leak.size)
-        }
-    }
-}

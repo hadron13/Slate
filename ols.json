@@ -7,7 +7,7 @@
 	"enable_snippets": true,
 	"profile": "default",
 	"profiles": [
-		{ "name": "default", "checker_path": ["."]},
+		{ "name": "default", "checker_path": ["slate/slate.odin"]},
 		{ "name": "linux_profile", "os": "linux", "checker_path": ["."]},
 		{ "name": "windows_profile", "os": "windows", "checker_path": ["."]}
 	]
