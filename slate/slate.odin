@@ -568,9 +568,7 @@ quit :: proc"c"(status: int){
     {
         context = runtime.default_context()
 
-
         config_file, error := os.open("config.txt", os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0o777)
-
 
         if error == os.ERROR_NONE{
             for key in configuration{

@@ -4,7 +4,7 @@ package render
 import "core:strings"
 import "core:c"
 import "base:runtime"
-
+import "core:math"
 
 import "core:os"
 import "core:time"
@@ -77,6 +77,7 @@ load :: proc"c"(core : ^slate.core_interface){
 
 window : ^sdl2.Window
 gl_context : sdl2.GLContext
+core : ^slate.core_interface
 
 VBO : u32
 EBO : u32
@@ -85,9 +86,72 @@ test_shader : u32
 test_shader_uniforms : map[string]gl.Uniform_Info
 
 
-start :: proc"c"(core : ^slate.core_interface){
-    context = runtime.default_context()
 
+append_quad :: proc(vertices : ^[dynamic]f32, indices : ^[dynamic]u32, a, b, c, d : [3]f32){
+    last_vert :u32= cast(u32)len(vertices)/3
+   
+    append(vertices, a.x, a.y, a.z)
+    append(vertices, b.x + a.x, b.y + a.y, b.z + a.z)
+    append(vertices, c.x + a.x, c.y + a.y, c.z + a.z)
+    append(vertices, d.x + a.x, d.y + a.y, d.z + a.z)
+    
+    append(indices, last_vert, last_vert+1, last_vert+2, last_vert+2, last_vert+1, last_vert+3)
+}
+
+
+
+chunk_mesh :: proc() -> ([]f32,[]u32){
+    
+    vertices := make([dynamic]f32, 0, 512 * 3)
+    indices  := make([dynamic]u32, 0, 512)
+
+    blocks : [4][4][4]u32
+    for x := 0; x < 4 ; x+=1{
+        for y := 0; y < 4 ; y+=1{
+            for z := 0; z < 4 ; z+=1{
+                blocks[x][y][z] = 0 
+                if x+y+z < 2{ 
+                    blocks[x][y][z] = 1 
+                }
+            }
+        }
+    }
+    blocks[2][0][2] =1
+    for x := 0; x < 4 ; x+=1{
+        for y := 0; y < 4 ; y+=1{
+            for z := 0; z < 4 ; z+=1{ 
+                if blocks[x][y][z] == 0 do continue 
+
+                if x == 0 || blocks[x-1][y][z] == 0{
+                    append_quad(&vertices, &indices, {f32(x), f32(y), f32(z)}, {0, 1, 0}, {0, 0, 1}, {0, 1, 1})
+                }
+                if y == 0 || blocks[x][y-1][z] == 0{
+                    append_quad(&vertices, &indices, {f32(x), f32(y), f32(z)}, {0, 0, 1}, {1, 0, 0}, {1, 0, 1})
+                }
+                if z == 0 || blocks[x][y][z-1] == 0{
+                    append_quad(&vertices, &indices, {f32(x), f32(y), f32(z)}, {1, 0, 0}, {0, 1, 0}, {1, 1, 0})
+                }
+
+                if x == 3 || blocks[x+1][y][z] == 0{
+                    append_quad(&vertices, &indices, {f32(x)+1, f32(y), f32(z)}, {0, 0, 1}, {0, 1, 0}, {0, 1, 1})
+                }
+                if y == 3 || blocks[x][y+1][z] == 0{
+                    append_quad(&vertices, &indices, {f32(x), f32(y)+1, f32(z)}, {1, 0, 0}, {0, 0, 1}, {1, 0, 1})
+                }
+                if z == 3 || blocks[x][y][z+1] == 0{
+                     append_quad(&vertices, &indices, {f32(x), f32(y), f32(z)+1}, {0, 1, 0}, {1, 0, 0}, {1, 1, 0})
+                }
+            }
+        }
+    }
+    
+    return vertices[:], indices[:]
+
+}
+
+start :: proc"c"(core_interface : ^slate.core_interface){
+    context = runtime.default_context()
+    core = core_interface
     sdl2.Init(sdl2.INIT_EVERYTHING)
 
     sdl2.GL_SetAttribute(sdl2.GLattr.CONTEXT_MAJOR_VERSION, 3)
@@ -96,7 +160,7 @@ start :: proc"c"(core : ^slate.core_interface){
     
     window_name := core.config_get_string("render/window/name", "Slate")
     window_width := core.config_get_int("render/window/width", 800)
-    window_height := core.config_get_int("render/window/height", 640)
+    window_height := core.config_get_int("render/window/height", 800)
 
     window = sdl2.CreateWindow(strings.clone_to_cstring(window_name, context.temp_allocator), sdl2.WINDOWPOS_CENTERED, sdl2.WINDOWPOS_CENTERED, i32(window_width), i32(window_height), sdl2.WINDOW_RESIZABLE | sdl2.WINDOW_OPENGL)
     if(window == nil){
@@ -123,60 +187,22 @@ start :: proc"c"(core : ^slate.core_interface){
     gl.Enable(gl.DEPTH_TEST)
     gl.Enable(gl.CULL_FACE)
     gl.CullFace(gl.FRONT)
-    // gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
+    gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 
     ok : bool
     test_shader, ok = gl.load_shaders_file("mods/render/shaders/vert.glsl", "mods/render/shaders/frag.glsl")
     if !ok {
         a, b, c, d := gl.get_last_error_messages()
         core.log(.ERROR, "Could not compile shaders\n %s\n %s", a, c)
+        core.quit(-1)
     }else{
         core.log(.INFO, "Shaders loaded")
     }
     gl.UseProgram(test_shader)
     test_shader_uniforms = gl.get_uniforms_from_program(test_shader)
 
-    vertices := []f32{
-       //back
-       -1.0, -1.0, -1.0,     1.0, 1.0,   0.0, 0.0, -1.0,
-        1.0, -1.0, -1.0,     0.0, 1.0,   0.0, 0.0, -1.0,
-        1.0,  1.0, -1.0,     0.0, 0.0,   0.0, 0.0, -1.0,
-       -1.0,  1.0, -1.0,     1.0, 0.0,   0.0, 0.0, -1.0,
-        //front
-       -1.0, -1.0,  1.0,     0.0, 1.0,   0.0, 0.0, 1.0,
-        1.0, -1.0,  1.0,     1.0, 1.0,   0.0, 0.0, 1.0,
-        1.0,  1.0,  1.0,     1.0, 0.0,   0.0, 0.0, 1.0,
-       -1.0,  1.0,  1.0,     0.0, 0.0,   0.0, 0.0, 1.0,
-        //left
-       -1.0, -1.0, -1.0,     0.0, 1.0,  -1.0, 0.0, 0.0,
-       -1.0,  1.0, -1.0,     0.0, 0.0,  -1.0, 0.0, 0.0,
-       -1.0,  1.0,  1.0,     1.0, 0.0,  -1.0, 0.0, 0.0,
-       -1.0, -1.0,  1.0,     1.0, 1.0,  -1.0, 0.0, 0.0,
-        //right
-        1.0, -1.0, -1.0,     1.0, 1.0,   1.0, 0.0, 0.0, 
-        1.0,  1.0, -1.0,     1.0, 0.0,   1.0, 0.0, 0.0, 
-        1.0,  1.0,  1.0,     0.0, 0.0,   1.0, 0.0, 0.0, 
-        1.0, -1.0,  1.0,     0.0, 1.0,   1.0, 0.0, 0.0, 
-        //down
-       -1.0, -1.0, -1.0,     1.0, 0.0,   0.0, -1.0, 0.0,
-       -1.0, -1.0,  1.0,     1.0, 1.0,   0.0, -1.0, 0.0,
-        1.0, -1.0,  1.0,     0.0, 1.0,   0.0, -1.0, 0.0,
-        1.0, -1.0, -1.0,     0.0, 0.0,   0.0, -1.0, 0.0,
-        //up
-       -1.0,  1.0, -1.0,     0.0, 0.0,   0.0, 1.0, 0.0,
-       -1.0,  1.0,  1.0,     0.0, 1.0,   0.0, 1.0, 0.0,
-        1.0,  1.0,  1.0,     1.0, 1.0,   0.0, 1.0, 0.0,
-        1.0,  1.0, -1.0,     1.0, 0.0,   0.0, 1.0, 0.0,
-    }
 
-    indices := []u32{
-        0, 1, 2,  0, 2, 3,
-        6, 5, 4,  7, 6, 4,
-        8, 9, 10,  8, 10, 11,
-        14, 13, 12,  15, 14, 12,
-        16, 17, 18,  16, 18, 19,
-        22, 21, 20,  23, 22, 20
-    }
+    vertices, indices := chunk_mesh()
 
     gl.GenVertexArrays(1, &VAO)
     gl.GenBuffers(1, &VBO)
@@ -190,12 +216,12 @@ start :: proc"c"(core : ^slate.core_interface){
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO)
     gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices) * size_of(u32), raw_data(indices), gl.STATIC_DRAW)
     
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * size_of(f32), 0)
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * size_of(f32), 0)
     gl.EnableVertexAttribArray(0)
-    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 8 * size_of(f32), 3 * size_of(f32))
-    gl.EnableVertexAttribArray(1)
-    gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * size_of(f32), 5 * size_of(f32))
-    gl.EnableVertexAttribArray(2)
+    // gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 8 * size_of(f32), 3 * size_of(f32))
+    // gl.EnableVertexAttribArray(1)
+    // gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * size_of(f32), 5 * size_of(f32))
+    // gl.EnableVertexAttribArray(2)
 
     gl.BindBuffer(gl.ARRAY_BUFFER, 0);
     gl.BindVertexArray(0)
@@ -219,14 +245,14 @@ input :: proc"c"(core : ^slate.core_interface){
 
 render :: proc"c"(core : ^slate.core_interface){
     
-    gl.ClearColor(0.4, 0.1, 0.3, 1.0)
+    gl.ClearColor(0.1, 0.1, 0.1, 1.0)
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
    
     t : f32 = cast(f32)sdl2.GetTicks()/1000.0
 
     projection := glm.mat4PerspectiveInfinite(90, 800/640, 0.01)
     view := glm.identity(glm.mat4)
-    model := glm.mat4Translate(glm.vec3{0.0, 0.0, -4.0}) * glm.mat4Rotate(glm.vec3{0, 1.0, 0}, t)
+    model := glm.mat4Translate(glm.vec3{0.0, -2.5, -4.0}) * glm.mat4Rotate(glm.vec3{0, 1.0, 0}, t)
     
     gl.UseProgram(test_shader)
     // gl.Uniform1f(test_shader_uniforms["t"].location, t)
@@ -237,7 +263,7 @@ render :: proc"c"(core : ^slate.core_interface){
 
 
     gl.BindVertexArray(VAO)
-    gl.DrawElements(gl.TRIANGLES, 36, gl.UNSIGNED_INT, nil)
+    gl.DrawElements(gl.TRIANGLES, 500, gl.UNSIGNED_INT, nil)
 
     sdl2.GL_SwapWindow(window)
 }
