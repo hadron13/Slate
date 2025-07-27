@@ -42,8 +42,9 @@ material :: struct{
 }
 
 camera :: struct{
-    position : [3]f32,
-    rotation : quaternion128,
+    position : [3]f32, 
+    velocity : [3]f32,
+    yaw,pitch: f32,
     fov      : f32,
 }
 
@@ -79,13 +80,15 @@ window : ^sdl2.Window
 gl_context : sdl2.GLContext
 core : ^slate.core_interface
 
+
 VBO : u32
 EBO : u32
 VAO : u32
 test_shader : u32
 test_shader_uniforms : map[string]gl.Uniform_Info
+main_camera : camera
 
-
+update_camera :: proc(){}
 
 append_quad :: proc(vertices : ^[dynamic]f32, indices : ^[dynamic]u32, a, b, c, d : [3]f32){
     last_vert :u32= cast(u32)len(vertices)/3
@@ -98,28 +101,16 @@ append_quad :: proc(vertices : ^[dynamic]f32, indices : ^[dynamic]u32, a, b, c, 
     append(indices, last_vert, last_vert+1, last_vert+2, last_vert+2, last_vert+1, last_vert+3)
 }
 
+CHUNK_SIZE :: 8
 
-
-chunk_mesh :: proc() -> ([]f32,[]u32){
+chunk_mesh :: proc(blocks : [CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE]u32) -> ([]f32,[]u32){
     
     vertices := make([dynamic]f32, 0, 512 * 3)
     indices  := make([dynamic]u32, 0, 512)
 
-    blocks : [4][4][4]u32
-    for x := 0; x < 4 ; x+=1{
-        for y := 0; y < 4 ; y+=1{
-            for z := 0; z < 4 ; z+=1{
-                blocks[x][y][z] = 0 
-                if x+y+z < 2{ 
-                    blocks[x][y][z] = 1 
-                }
-            }
-        }
-    }
-    blocks[2][0][2] =1
-    for x := 0; x < 4 ; x+=1{
-        for y := 0; y < 4 ; y+=1{
-            for z := 0; z < 4 ; z+=1{ 
+    for x := 0; x < CHUNK_SIZE ; x+=1{
+        for y := 0; y < CHUNK_SIZE ; y+=1{
+            for z := 0; z < CHUNK_SIZE ; z+=1{ 
                 if blocks[x][y][z] == 0 do continue 
 
                 if x == 0 || blocks[x-1][y][z] == 0{
@@ -132,13 +123,13 @@ chunk_mesh :: proc() -> ([]f32,[]u32){
                     append_quad(&vertices, &indices, {f32(x), f32(y), f32(z)}, {1, 0, 0}, {0, 1, 0}, {1, 1, 0})
                 }
 
-                if x == 3 || blocks[x+1][y][z] == 0{
+                if x == CHUNK_SIZE-1 || blocks[x+1][y][z] == 0{
                     append_quad(&vertices, &indices, {f32(x)+1, f32(y), f32(z)}, {0, 0, 1}, {0, 1, 0}, {0, 1, 1})
                 }
-                if y == 3 || blocks[x][y+1][z] == 0{
+                if y == CHUNK_SIZE-1 || blocks[x][y+1][z] == 0{
                     append_quad(&vertices, &indices, {f32(x), f32(y)+1, f32(z)}, {1, 0, 0}, {0, 0, 1}, {1, 0, 1})
                 }
-                if z == 3 || blocks[x][y][z+1] == 0{
+                if z == CHUNK_SIZE-1 || blocks[x][y][z+1] == 0{
                      append_quad(&vertices, &indices, {f32(x), f32(y), f32(z)+1}, {0, 1, 0}, {1, 0, 0}, {1, 1, 0})
                 }
             }
@@ -202,7 +193,18 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     test_shader_uniforms = gl.get_uniforms_from_program(test_shader)
 
 
-    vertices, indices := chunk_mesh()
+    blocks : [CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE]u32
+    for x := 0; x < CHUNK_SIZE ; x+=1{
+        for y := 0; y < CHUNK_SIZE ; y+=1{
+            for z := 0; z < CHUNK_SIZE ; z+=1{
+                blocks[x][y][z] = 0 
+                if x+y+z < 7{ 
+                    blocks[x][y][z] = 1 
+                }
+            }
+        }
+    }
+    vertices, indices := chunk_mesh(blocks)
 
     gl.GenVertexArrays(1, &VAO)
     gl.GenBuffers(1, &VBO)
@@ -227,6 +229,8 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     gl.BindVertexArray(0)
 
 
+    sdl2.SetRelativeMouseMode(true)
+    main_camera = {{0, 0, -2}, {0, 0, 0}, -90, 0, 90}
 
 }
 
@@ -239,6 +243,34 @@ input :: proc"c"(core : ^slate.core_interface){
                 sdl2.DestroyWindow(window)
                 sdl2.Quit()
                 core.quit(0)
+        
+        case .KEYDOWN:
+            #partial switch(event.key.keysym.sym){
+            case .w: main_camera.velocity.z = -0.1
+            case .a: main_camera.velocity.x = -0.1
+            case .s: main_camera.velocity.z = 0.1
+            case .d: main_camera.velocity.x = 0.1
+
+            case .SPACE: main_camera.velocity.y = 0.1
+            case .c: main_camera.velocity.y =    -0.1
+            }
+        case .KEYUP:
+            #partial switch(event.key.keysym.sym){
+            case .w: main_camera.velocity.z = 0
+            case .a: main_camera.velocity.x = 0
+            case .s: main_camera.velocity.z = 0
+            case .d: main_camera.velocity.x = 0
+            
+            case .SPACE: main_camera.velocity.y = 0
+            case .c: main_camera.velocity.y = 0
+                
+            case .ESCAPE:
+                sdl2.SetRelativeMouseMode(!sdl2.GetRelativeMouseMode())
+            }
+        case .MOUSEMOTION:
+            main_camera.yaw += cast(f32)event.motion.xrel * 0.2
+            main_camera.pitch -= cast(f32)event.motion.yrel * 0.2
+            main_camera.pitch = math.clamp(main_camera.pitch, -89.9, 89.9)
         }
     }
 }
@@ -250,9 +282,33 @@ render :: proc"c"(core : ^slate.core_interface){
    
     t : f32 = cast(f32)sdl2.GetTicks()/1000.0
 
+
     projection := glm.mat4PerspectiveInfinite(90, 800/640, 0.01)
-    view := glm.identity(glm.mat4)
-    model := glm.mat4Translate(glm.vec3{0.0, -2.5, -4.0}) * glm.mat4Rotate(glm.vec3{0, 1.0, 0}, t)
+
+
+
+    front :[3]f32= glm.normalize([3]f32{math.cos(glm.radians(main_camera.yaw)) * math.cos(glm.radians(main_camera.pitch)),
+                                        math.sin(glm.radians(main_camera.pitch)),
+                                        math.sin(glm.radians(main_camera.yaw)) * math.cos(glm.radians(main_camera.pitch))})
+    
+    front_straight := glm.normalize([3]f32{front.x, 0, front.z})
+
+    up := [3]f32{0, 1, 0} 
+    right := glm.normalize(glm.cross(up, front_straight))
+    
+
+    main_camera.position -= right          * main_camera.velocity.x
+    main_camera.position += up             * main_camera.velocity.y
+    main_camera.position -= front_straight * main_camera.velocity.z
+    
+    
+
+
+    // core.log(.DEBUG, "%f, %f, %f", camera_direction.x, camera_direction.y, camera_direction.z)
+
+    view := glm.mat4LookAt(main_camera.position, main_camera.position + front, {0, 1, 0})
+    // view := glm.identity(glm.mat4)
+    model := glm.mat4Translate(glm.vec3{0.0, -2.5, -4.0})
     
     gl.UseProgram(test_shader)
     // gl.Uniform1f(test_shader_uniforms["t"].location, t)
@@ -263,7 +319,7 @@ render :: proc"c"(core : ^slate.core_interface){
 
 
     gl.BindVertexArray(VAO)
-    gl.DrawElements(gl.TRIANGLES, 500, gl.UNSIGNED_INT, nil)
+    gl.DrawElements(gl.TRIANGLES, 2048, gl.UNSIGNED_INT, nil)
 
     sdl2.GL_SwapWindow(window)
 }
