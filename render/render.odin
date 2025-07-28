@@ -88,7 +88,25 @@ test_shader : u32
 test_shader_uniforms : map[string]gl.Uniform_Info
 main_camera : camera
 
-update_camera :: proc(){}
+
+camera_update :: proc"c"(camera : ^camera, delta_time : f32) -> glm.mat4{
+
+    front :[3]f32= glm.normalize(
+    [3]f32{math.cos(glm.radians(main_camera.yaw)) * math.cos(glm.radians(main_camera.pitch)),
+           math.sin(glm.radians(main_camera.pitch)),
+           math.sin(glm.radians(main_camera.yaw)) * math.cos(glm.radians(main_camera.pitch))})
+    
+    front_straight := glm.normalize([3]f32{front.x, 0, front.z})
+
+    up := [3]f32{0, 1, 0} 
+    right := glm.normalize(glm.cross(up, front_straight))
+
+    main_camera.position -= right          * main_camera.velocity.x * delta_time
+    main_camera.position += up             * main_camera.velocity.y * delta_time
+    main_camera.position -= front_straight * main_camera.velocity.z * delta_time 
+
+    return glm.mat4LookAt(main_camera.position, main_camera.position + front, {0, 1, 0})
+}
 
 append_quad :: proc(vertices : ^[dynamic]f32, indices : ^[dynamic]u32, a, b, c, d : [3]f32){
     last_vert :u32= cast(u32)len(vertices)/3
@@ -285,29 +303,9 @@ render :: proc"c"(core : ^slate.core_interface){
 
     projection := glm.mat4PerspectiveInfinite(90, 800/640, 0.01)
 
+    view := camera_update(&main_camera, 1.0)
 
-
-    front :[3]f32= glm.normalize([3]f32{math.cos(glm.radians(main_camera.yaw)) * math.cos(glm.radians(main_camera.pitch)),
-                                        math.sin(glm.radians(main_camera.pitch)),
-                                        math.sin(glm.radians(main_camera.yaw)) * math.cos(glm.radians(main_camera.pitch))})
-    
-    front_straight := glm.normalize([3]f32{front.x, 0, front.z})
-
-    up := [3]f32{0, 1, 0} 
-    right := glm.normalize(glm.cross(up, front_straight))
-    
-
-    main_camera.position -= right          * main_camera.velocity.x
-    main_camera.position += up             * main_camera.velocity.y
-    main_camera.position -= front_straight * main_camera.velocity.z
-    
-    
-
-
-    // core.log(.DEBUG, "%f, %f, %f", camera_direction.x, camera_direction.y, camera_direction.z)
-
-    view := glm.mat4LookAt(main_camera.position, main_camera.position + front, {0, 1, 0})
-    // view := glm.identity(glm.mat4)
+        // view := glm.identity(glm.mat4)
     model := glm.mat4Translate(glm.vec3{0.0, -2.5, -4.0})
     
     gl.UseProgram(test_shader)
