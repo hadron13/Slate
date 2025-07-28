@@ -12,6 +12,7 @@ import "vendor:sdl2"
 import "vendor:sdl2/image"
 import gl "vendor:OpenGL"
 import glm "core:math/linalg/glsl"
+import stb "vendor:stb/image"
 
 
 MODULE :: #config(MOD, "Render")
@@ -84,6 +85,7 @@ core : ^slate.core_interface
 VBO : u32
 EBO : u32
 VAO : u32
+test_texture : u32
 test_shader : u32
 test_shader_uniforms : map[string]gl.Uniform_Info
 main_camera : camera
@@ -247,6 +249,33 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     gl.BindBuffer(gl.ARRAY_BUFFER, 0);
     gl.BindVertexArray(0)
 
+    img :: #load("textures/renatoemperra.png", string)
+
+	gl.GenTextures(1, &test_texture)
+	gl.BindTexture(gl.TEXTURE_2D_ARRAY, test_texture)
+	gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT)
+	gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT)
+	gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+	gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
+   
+    datas :[]string= {
+        img
+    }
+
+    stb.set_flip_vertically_on_load(1)
+
+    gl.TexImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.SRGB8_ALPHA8, 320, 320, i32(len(datas)), 0, gl.RGBA, gl.UNSIGNED_BYTE, nil)
+
+    width, height, channels: i32
+
+	for tex, idx in datas {
+		pixels := stb.load_from_memory(raw_data(tex), i32(len(tex)), &width, &height, &channels, 4)
+		gl.TexSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i32(idx), 320, 320, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+		stb.image_free(pixels)
+	}
+    gl.GenerateMipmap(gl.TEXTURE_2D_ARRAY)
+    
 
     sdl2.SetRelativeMouseMode(true)
     main_camera = {{0, 0, -2}, {0, 0, 0}, -90, 0, 90}
@@ -272,6 +301,8 @@ input :: proc"c"(core : ^slate.core_interface){
 
             case .SPACE: main_camera.velocity.y = 0.1
             case .c: main_camera.velocity.y =    -0.1
+            
+            case .z: main_camera.fov = 20
             }
         case .KEYUP:
             #partial switch(event.key.keysym.sym){
@@ -282,14 +313,18 @@ input :: proc"c"(core : ^slate.core_interface){
             
             case .SPACE: main_camera.velocity.y = 0
             case .c: main_camera.velocity.y = 0
+            
+            case .z: main_camera.fov = 90 
                 
             case .ESCAPE:
                 sdl2.SetRelativeMouseMode(!sdl2.GetRelativeMouseMode())
             }
         case .MOUSEMOTION:
-            main_camera.yaw += cast(f32)event.motion.xrel * 0.2
-            main_camera.pitch -= cast(f32)event.motion.yrel * 0.2
-            main_camera.pitch = math.clamp(main_camera.pitch, -89.9, 89.9)
+            if(sdl2.GetRelativeMouseMode()){
+                main_camera.yaw += cast(f32)event.motion.xrel * 0.2
+                main_camera.pitch -= cast(f32)event.motion.yrel * 0.2
+                main_camera.pitch = math.clamp(main_camera.pitch, -89.9, 89.9)
+            }
         }
     }
 }
@@ -302,7 +337,7 @@ render :: proc"c"(core : ^slate.core_interface){
     t : f32 = cast(f32)sdl2.GetTicks()/1000.0
 
 
-    projection := glm.mat4PerspectiveInfinite(90, 800/640, 0.01)
+    projection := glm.mat4PerspectiveInfinite(main_camera.fov, 800/640, 0.01)
 
     view := camera_update(&main_camera, 1.0)
 
