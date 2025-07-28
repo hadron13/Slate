@@ -108,13 +108,14 @@ camera_update :: proc"c"(camera : ^camera, delta_time : f32) -> glm.mat4{
     return glm.mat4LookAt(main_camera.position, main_camera.position + front, {0, 1, 0})
 }
 
-append_quad :: proc(vertices : ^[dynamic]f32, indices : ^[dynamic]u32, a, b, c, d : [3]f32){
-    last_vert :u32= cast(u32)len(vertices)/3
+//vertex format: XYZ - UV
+append_quad :: proc(vertices : ^[dynamic]f32, indices : ^[dynamic]u32, a, b, c, d : [5]f32){
+    last_vert :u32= cast(u32)len(vertices)/5
    
-    append(vertices, a.x, a.y, a.z)
-    append(vertices, b.x + a.x, b.y + a.y, b.z + a.z)
-    append(vertices, c.x + a.x, c.y + a.y, c.z + a.z)
-    append(vertices, d.x + a.x, d.y + a.y, d.z + a.z)
+    append(vertices, a[0], a[1], a[2], a[3], a[4])
+    append(vertices, b[0] + a[0], b[1] + a[1], b[2] + a[2], b[3], b[4])
+    append(vertices, c[0] + a[0], c[1] + a[1], c[2] + a[2], c[3], c[4])
+    append(vertices, d[0] + a[0], d[1] + a[1], d[2] + a[2], d[3], d[4])
     
     append(indices, last_vert, last_vert+1, last_vert+2, last_vert+2, last_vert+1, last_vert+3)
 }
@@ -132,23 +133,23 @@ chunk_mesh :: proc(blocks : [CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE]u32) -> ([]f32,[
                 if blocks[x][y][z] == 0 do continue 
 
                 if x == 0 || blocks[x-1][y][z] == 0{
-                    append_quad(&vertices, &indices, {f32(x), f32(y), f32(z)}, {0, 1, 0}, {0, 0, 1}, {0, 1, 1})
+                    append_quad(&vertices, &indices, {f32(x), f32(y), f32(z), 0, 0}, {0, 1, 0, 0, 1}, {0, 0, 1, 1, 0}, {0, 1, 1, 1, 1})
                 }
                 if y == 0 || blocks[x][y-1][z] == 0{
-                    append_quad(&vertices, &indices, {f32(x), f32(y), f32(z)}, {0, 0, 1}, {1, 0, 0}, {1, 0, 1})
+                    append_quad(&vertices, &indices, {f32(x), f32(y), f32(z), 0, 0}, {0, 0, 1, 0, 1}, {1, 0, 0, 1, 0}, {1, 0, 1, 1, 1})
                 }
                 if z == 0 || blocks[x][y][z-1] == 0{
-                    append_quad(&vertices, &indices, {f32(x), f32(y), f32(z)}, {1, 0, 0}, {0, 1, 0}, {1, 1, 0})
+                    append_quad(&vertices, &indices, {f32(x), f32(y), f32(z), 1, 0}, {1, 0, 0, 0, 0}, {0, 1, 0, 1, 1}, {1, 1, 0, 0, 1})
                 }
 
                 if x == CHUNK_SIZE-1 || blocks[x+1][y][z] == 0{
-                    append_quad(&vertices, &indices, {f32(x)+1, f32(y), f32(z)}, {0, 0, 1}, {0, 1, 0}, {0, 1, 1})
+                    append_quad(&vertices, &indices, {f32(x)+1, f32(y), f32(z), 1, 0}, {0, 0, 1, 0, 0}, {0, 1, 0, 1, 1}, {0, 1, 1, 0, 1})
                 }
                 if y == CHUNK_SIZE-1 || blocks[x][y+1][z] == 0{
-                    append_quad(&vertices, &indices, {f32(x), f32(y)+1, f32(z)}, {1, 0, 0}, {0, 0, 1}, {1, 0, 1})
+                    append_quad(&vertices, &indices, {f32(x), f32(y)+1, f32(z), 0, 0}, {1, 0, 0, 0, 1}, {0, 0, 1, 1, 0}, {1, 0, 1, 1, 1})
                 }
                 if z == CHUNK_SIZE-1 || blocks[x][y][z+1] == 0{
-                     append_quad(&vertices, &indices, {f32(x), f32(y), f32(z)+1}, {0, 1, 0}, {1, 0, 0}, {1, 1, 0})
+                     append_quad(&vertices, &indices, {f32(x), f32(y), f32(z)+1, 0, 0}, {0, 1, 0, 0, 1}, {1, 0, 0, 1, 0}, {1, 1, 0, 1, 1})
                 }
             }
         }
@@ -196,7 +197,7 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     gl.Enable(gl.DEPTH_TEST)
     gl.Enable(gl.CULL_FACE)
     gl.CullFace(gl.FRONT)
-    gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
+    // gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 
     ok : bool
     test_shader, ok = gl.load_shaders_file("mods/render/shaders/vert.glsl", "mods/render/shaders/frag.glsl")
@@ -236,10 +237,10 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO)
     gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices) * size_of(u32), raw_data(indices), gl.STATIC_DRAW)
     
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * size_of(f32), 0)
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * size_of(f32), 0)
     gl.EnableVertexAttribArray(0)
-    // gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 8 * size_of(f32), 3 * size_of(f32))
-    // gl.EnableVertexAttribArray(1)
+    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 5 * size_of(f32), 3 * size_of(f32))
+    gl.EnableVertexAttribArray(1)
     // gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * size_of(f32), 5 * size_of(f32))
     // gl.EnableVertexAttribArray(2)
 
