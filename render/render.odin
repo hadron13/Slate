@@ -12,7 +12,10 @@ import "vendor:sdl2"
 import "vendor:sdl2/image"
 import gl "vendor:OpenGL"
 import glm "core:math/linalg/glsl"
+import "core:math/linalg"
+import "core:math/noise"
 import stb "vendor:stb/image"
+
 
 
 MODULE :: #config(MOD, "Render")
@@ -70,7 +73,7 @@ render_interface :: struct{
 chunk:: struct{
     blocks    : [CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE]u32,
     vao, vbo  : u32,
-    offset    : [3]u32,
+    offset    : [3]i32,
     transform : glm.mat4,    
 }
 
@@ -90,6 +93,7 @@ window : ^sdl2.Window
 gl_context : sdl2.GLContext
 core : ^slate.core_interface
 
+chunk_map : map[[3]i32]chunk
 
 quad_ebo : u32
 
@@ -120,26 +124,25 @@ camera_update :: proc"c"(camera : ^camera, delta_time : f32) -> glm.mat4{
 }
 
 
-chunk_create :: proc() -> chunk{
+chunk_create :: proc(position : [3]i32) -> chunk{
     
     chunk : chunk
 
+    chunk.offset = position
+    chunk.transform = glm.mat4Translate(linalg.to_f32(position * CHUNK_SIZE))//glm.identity(glm.mat4)
+
     for x := 0; x < CHUNK_SIZE ; x+=1{
-        for y := 0; y < CHUNK_SIZE ; y+=1{
-            for z := 0; z < CHUNK_SIZE ; z+=1{
-                chunk.blocks[x][y][z] = 0 
-                if x+y+z < 7{ 
-                    chunk.blocks[x][y][z] = 1 
-                }
+        for z := 0; z < CHUNK_SIZE ; z+=1{
+            height := noise.noise_2d(9234, {f64(x+int(position.x)*CHUNK_SIZE)/8, f64(z+int(position.z)*CHUNK_SIZE)/8})
+            for y := 0; y < CHUNK_SIZE ; y+=1{
+                if(y < int(height * 3)+4) do chunk.blocks[x][y][z]= 1
             }
         }
     }
     
     vertices:= chunk_mesh(&chunk)
 
-
-
-    gl.GenVertexArrays(1, &(chunk.vao))
+    gl.GenVertexArrays(1, &chunk.vao)
     gl.GenBuffers(1, &chunk.vbo)
     
     gl.BindVertexArray(chunk.vao)
@@ -147,11 +150,24 @@ chunk_create :: proc() -> chunk{
     gl.BindBuffer(gl.ARRAY_BUFFER, chunk.vbo);
     gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(f32), raw_data(vertices), gl.STATIC_DRAW)
 
+    if(quad_ebo == 0){
+        indices  := make([dynamic]u32, 0, 2048)
+        for i :u32= 0; i < 2048; i += 4{
+            append(&indices, i, i+1, i+2, i+2, i+1, i+3)
+        }
+        gl.GenBuffers(1, &quad_ebo)
+        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, quad_ebo)
+        gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices) * size_of(u32), raw_data(indices), gl.STATIC_DRAW)
+    }
+
+
     
     gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * size_of(f32), 0)
     gl.EnableVertexAttribArray(0)
     gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 5 * size_of(f32), 3 * size_of(f32))
     gl.EnableVertexAttribArray(1)
+
+    gl.BindVertexArray(0)
 
     return chunk
 
@@ -206,6 +222,17 @@ chunk_mesh :: proc(chunk : ^chunk) -> []f32{
     return vertices[:]
 }
 
+chunk_render:: proc"c"(chunk : ^chunk){
+    // core.log(.DEBUG, "VAO: %i, %i, %i, %i", chunk.vao, chunk.offset.x, chunk.offset.y, chunk.offset.z)
+    model := glm.mat4Translate({f32(chunk.offset.x*CHUNK_SIZE), f32(chunk.offset.y*CHUNK_SIZE), f32(chunk.offset.z*CHUNK_SIZE)})
+    gl.UniformMatrix4fv(test_shader_uniforms["model"].location, 1, gl.FALSE, &model[0,0])
+
+    gl.BindVertexArray(chunk.vao)
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, quad_ebo)
+    gl.DrawElements(gl.TRIANGLES, 2048, gl.UNSIGNED_INT, nil)
+
+}
+
 start :: proc"c"(core_interface : ^slate.core_interface){
     context = runtime.default_context()
     core = core_interface
@@ -257,17 +284,15 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     gl.UseProgram(test_shader)
     test_shader_uniforms = gl.get_uniforms_from_program(test_shader)
 
-    indices  := make([dynamic]u32, 0, 2048)
-    for i :u32= 0; i < 2048; i += 4{
-        append(&indices, i, i+1, i+2, i+2, i+1, i+3)
+
+
+    
+    for x :i32= -8; x < 8; x+=1{
+        for z :i32= -8; z < 8; z+=1{
+            chunk_map[{x, 0, z}] = chunk_create({x, 0, z})
+        }
     }
 
-
-    test_chunk = chunk_create()
-    
-    gl.GenBuffers(1, &quad_ebo)
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, quad_ebo)
-    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices) * size_of(u32), raw_data(indices), gl.STATIC_DRAW)
        // gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * size_of(f32), 5 * size_of(f32))
     // gl.EnableVertexAttribArray(2)
 
@@ -301,6 +326,12 @@ start :: proc"c"(core_interface : ^slate.core_interface){
 		stb.image_free(pixels)
 	}
     gl.GenerateMipmap(gl.TEXTURE_2D_ARRAY)
+
+	if sdl2.GL_ExtensionSupported("GL_EXT_texture_filter_anisotropic") {
+		filter: f32
+		gl.GetFloatv(gl.MAX_TEXTURE_MAX_ANISOTROPY, &filter)
+		gl.TexParameterf(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAX_ANISOTROPY, filter)
+	}
     
 
     sdl2.SetRelativeMouseMode(true)
@@ -359,7 +390,7 @@ input :: proc"c"(core : ^slate.core_interface){
 
 render :: proc"c"(core : ^slate.core_interface){
     
-    gl.ClearColor(0.1, 0.1, 0.1, 1.0)
+    gl.ClearColor(0.04, 0.76, 0.94, 1.0)
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
    
     t : f32 = cast(f32)sdl2.GetTicks()/1000.0
@@ -369,8 +400,8 @@ render :: proc"c"(core : ^slate.core_interface){
 
     view := camera_update(&main_camera, 1.0)
 
-        // view := glm.identity(glm.mat4)
-    model := glm.mat4Translate(glm.vec3{0.0, -2.5, -4.0})
+    model := glm.identity(glm.mat4)
+    // model := glm.mat4Translate(glm.vec3{0.0, -2.5, -4.0})
     
     gl.UseProgram(test_shader)
     // gl.Uniform1f(test_shader_uniforms["t"].location, t)
@@ -380,9 +411,15 @@ render :: proc"c"(core : ^slate.core_interface){
 
 
 
-    gl.BindVertexArray(test_chunk.vao)
-    gl.DrawElements(gl.TRIANGLES, 2048, gl.UNSIGNED_INT, nil)
-
+    // gl.BindVertexArray(test_chunk.vao)
+    // gl.DrawElements(gl.TRIANGLES, 2048, gl.UNSIGNED_INT, nil)
+   
+    for key, &chunk in chunk_map{
+        chunk_render(&chunk) 
+    } 
+    
+    
+    
     sdl2.GL_SwapWindow(window)
 }
 
