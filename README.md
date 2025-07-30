@@ -1,5 +1,6 @@
-# Slate
+# Slate - Voxel
 A Minimalist Modular Game Engine written in [Odin](https://odin-lang.org), heavily inspired in the deceived Our Machinery engine.
+This specific version is dedicated to create a Minecraft-esque game for mods to build on.
 
 ## Compiling
 
