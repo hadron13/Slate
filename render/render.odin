@@ -80,7 +80,7 @@ chunk:: struct{
 
 
 @export
-load :: proc"c"(core : ^slate.core_interface){
+load :: proc"c"(core : ^slate.core_interface) -> slate.version{
     context = runtime.default_context()
     core.task_add_pool("render", 1)
     core.task_add_once("render/start", "render", start, nil)
@@ -88,6 +88,8 @@ load :: proc"c"(core : ^slate.core_interface){
     core.task_add_repeated("render/render", "render", render, {"render/input"})
 
     core.module_set_version("render", {0, 0, 1})
+
+    return {0, 0, 1}
 }
 
 window : ^sdl2.Window

@@ -40,7 +40,7 @@ module_interface :: distinct rawptr
 @private
 module :: struct{
     name              : string,
-    module_version    : version,
+    version    : version,
     interface         : module_interface,
     library           : dynlib.Library,
     dependencies      : []string,
@@ -212,16 +212,6 @@ main :: proc() {
         defer delete(mod_listings)
         console_log(.INFO, "%i mods found", len(mod_listings))
 
-        for listed_mod in mod_listings{
-            mod_path := strings.concatenate([] string{cwd, "/", mod_directory_path, "/", listed_mod.name, "/", listed_mod.name, ".",dynlib.LIBRARY_FILE_EXTENSION})
-            if(!os.exists(mod_path)){
-                continue
-            }
-            //when ODIN_OS == .Windows{windows.SetDllDirectoryW()} //TODO add proper parameters
-            
-            injection_lib, ok := dynlib.load_library(mod_path) // TODO: code injection support 
-        }
-
         for listed_mod in mod_listings{    
             console_log(.INFO, "loading module '%s'", listed_mod.name)
 
@@ -244,9 +234,13 @@ main :: proc() {
                 console_log(.ERROR, "Load procedure not found at %s", mod_path)
                 continue
             }
+            modules[listed_mod.name] = {name=listed_mod.name, library=mod_lib}
         
-            load_proc := cast(proc"c"(^core_interface)) load_ptr
-            load_proc(&interface)
+            load_proc := cast(proc"c"(^core_interface) -> version) load_ptr
+
+            mod_version := load_proc(&interface)
+
+            (&modules[listed_mod.name]).version = mod_version
         }
     }
     task_runner_thread(&task_pools["main"])
@@ -320,7 +314,6 @@ task_runner_thread :: proc(pool_ptr : rawptr){
     console_log(.INFO, "starting thread %i from pool %s", os.current_thread_id(), pool.name)
     for pool.is_running {
         task_execute(pool)
-        // time.sleep(time.Second)
     }
 }
 
@@ -390,6 +383,7 @@ task_execute :: proc(pool: ^task_pool){
             }
         }
         pool.task_index = 0
+        time.sleep(1 * time.Microsecond)
         return
     }
     if task_to_run == nil do return
@@ -527,7 +521,7 @@ interface_set :: proc"c"(name : string, interface: module_interface){
 @private
 version_set :: proc"c"(name : string, version: version){
     if value, ok := &modules[name]; ok { 
-        value.module_version = version
+        value.version = version
     }
 }
 
@@ -538,7 +532,7 @@ interface_get :: proc"c"(name : string) -> module_interface{
 
 @private
 version_get :: proc"c"(name : string) -> version{
-    return modules[name].module_version
+    return modules[name].version
 }
 
 

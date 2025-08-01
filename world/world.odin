@@ -74,7 +74,7 @@ set_block :: proc"c"(world : ^world, position : block_pos, id: block_id){
 interface : world_interface
 
 @export
-load :: proc"c"(core : ^slate.core_interface){
+load :: proc"c"(core : ^slate.core_interface) -> slate.version{
     context = runtime.default_context()
 
     interface = {
@@ -87,8 +87,8 @@ load :: proc"c"(core : ^slate.core_interface){
     }
 
     core.task_add_repeated("world/generate", "main", generate, nil)
-    core.module_set_version("world", {0, 0, 1})
     core.module_set_interface("world", auto_cast(&interface))
+    return {0, 0, 1}
 }
 
 generate :: proc"c"(core : ^slate.core_interface){
