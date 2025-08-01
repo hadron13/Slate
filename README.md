@@ -37,6 +37,7 @@ Creating a new module is made as simple as possible, to create one yourself foll
 - Create an Odin file with the following code:
 ```odin
 package mymod
+MODULE :: #config(MOD, "MyModule")
 import "slate"
 
 @export
