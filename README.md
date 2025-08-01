@@ -41,8 +41,9 @@ MODULE :: #config(MOD, "MyModule")
 import "slate"
 
 @export
-load :: proc(core: ^slate.core_interface){
+load :: proc(core: ^slate.core_interface) -> slate.version{
   core.log(.INFO, "Hello Module!")
+  return {1, 0, 0}
 }
 ```
 - Copy the `slate.odin` file into the same directory as the file you just created
