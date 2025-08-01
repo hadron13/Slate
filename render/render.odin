@@ -20,6 +20,7 @@ import stb "vendor:stb/image"
 
 MODULE :: #config(MOD, "Render")
 import "../slate"
+import world_interface "../world/interface"
 
 
 mesh :: struct{
@@ -91,7 +92,8 @@ load :: proc"c"(core : ^slate.core_interface){
 
 window : ^sdl2.Window
 gl_context : sdl2.GLContext
-core : ^slate.core_interface
+core  : ^slate.core_interface
+world : ^world_interface.world_interface
 
 chunk_map : map[[3]i32]chunk
 
@@ -139,8 +141,13 @@ chunk_create :: proc(position : [3]i32) -> chunk{
             }
         }
     }
+
+    start := sdl2.GetPerformanceCounter()
     
     vertices:= chunk_mesh(&chunk)
+
+    end := sdl2.GetPerformanceCounter()
+    // core.log(.DEBUG, "%fms for a %i^3 chunk", f64(end-start)/f64(sdl2.GetPerformanceFrequency()/1000), CHUNK_SIZE)
 
     gl.GenVertexArrays(1, &chunk.vao)
     gl.GenBuffers(1, &chunk.vbo)
@@ -152,7 +159,7 @@ chunk_create :: proc(position : [3]i32) -> chunk{
 
     if(quad_ebo == 0){
         indices  := make([dynamic]u32, 0, 2048)
-        for i :u32= 0; i < 2048; i += 4{
+        for i :u32= 0; i < 10752; i += 4{
             append(&indices, i, i+1, i+2, i+2, i+1, i+3)
         }
         gl.GenBuffers(1, &quad_ebo)
@@ -175,9 +182,8 @@ chunk_create :: proc(position : [3]i32) -> chunk{
 
 
 //vertex format: XYZ - UV
-append_quad :: proc(vertices : ^[dynamic]f32, a, b, c, d : [5]f32){
-    last_vert :u32= cast(u32)len(vertices)/5
-   
+append_quad :: #force_inline proc(vertices : ^[dynamic]f32, a, b, c, d : [5]f32){
+    
     append(vertices, a[0], a[1], a[2], a[3], a[4])
     append(vertices, b[0] + a[0], b[1] + a[1], b[2] + a[2], b[3], b[4])
     append(vertices, c[0] + a[0], c[1] + a[1], c[2] + a[2], c[3], c[4])
@@ -186,10 +192,10 @@ append_quad :: proc(vertices : ^[dynamic]f32, a, b, c, d : [5]f32){
     // append(indices, last_vert, last_vert+1, last_vert+2, last_vert+2, last_vert+1, last_vert+3)
 }
 
-CHUNK_SIZE :: 8
+CHUNK_SIZE :: 16
 
 chunk_mesh :: proc(chunk : ^chunk) -> []f32{
-    vertices := make([dynamic]f32, 0, 512 * 3)
+    vertices := make([dynamic]f32, 0, 2048 * 3)
 
     for x := 0; x < CHUNK_SIZE ; x+=1{
         for y := 0; y < CHUNK_SIZE ; y+=1{
@@ -213,7 +219,7 @@ chunk_mesh :: proc(chunk : ^chunk) -> []f32{
                     append_quad(&vertices, {f32(x), f32(y)+1, f32(z), 0, 0}, {1, 0, 0, 0, 1}, {0, 0, 1, 1, 0}, {1, 0, 1, 1, 1})
                 }
                 if z == CHUNK_SIZE-1 || chunk.blocks[x][y][z+1] == 0{
-                     append_quad(&vertices, {f32(x), f32(y), f32(z)+1, 0, 0}, {0, 1, 0, 0, 1}, {1, 0, 0, 1, 0}, {1, 1, 0, 1, 1})
+                    append_quad(&vertices, {f32(x), f32(y), f32(z)+1, 0, 0}, {0, 1, 0, 0, 1}, {1, 0, 0, 1, 0}, {1, 1, 0, 1, 1})
                 }
             }
         }
@@ -229,13 +235,18 @@ chunk_render:: proc"c"(chunk : ^chunk){
 
     gl.BindVertexArray(chunk.vao)
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, quad_ebo)
-    gl.DrawElements(gl.TRIANGLES, 2048, gl.UNSIGNED_INT, nil)
+    gl.DrawElements(gl.TRIANGLES, 10752, gl.UNSIGNED_INT, nil)
 
 }
 
 start :: proc"c"(core_interface : ^slate.core_interface){
     context = runtime.default_context()
     core = core_interface
+    world = auto_cast(core.module_get_interface("world"))
+    if world == nil{
+        core.log(.ERROR, "world interface not found")
+    }
+
     sdl2.Init(sdl2.INIT_EVERYTHING)
 
     sdl2.GL_SetAttribute(sdl2.GLattr.CONTEXT_MAJOR_VERSION, 3)
@@ -389,37 +400,27 @@ input :: proc"c"(core : ^slate.core_interface){
 }
 
 render :: proc"c"(core : ^slate.core_interface){
-    
+ 
+
     gl.ClearColor(0.04, 0.76, 0.94, 1.0)
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
    
-    t : f32 = cast(f32)sdl2.GetTicks()/1000.0
-
 
     projection := glm.mat4PerspectiveInfinite(main_camera.fov, 800/640, 0.01)
-
     view := camera_update(&main_camera, 1.0)
-
     model := glm.identity(glm.mat4)
-    // model := glm.mat4Translate(glm.vec3{0.0, -2.5, -4.0})
     
     gl.UseProgram(test_shader)
-    // gl.Uniform1f(test_shader_uniforms["t"].location, t)
     gl.UniformMatrix4fv(test_shader_uniforms["proj"].location, 1, gl.FALSE, &projection[0,0])
     gl.UniformMatrix4fv(test_shader_uniforms["view"].location, 1, gl.FALSE, &view[0,0])
     gl.UniformMatrix4fv(test_shader_uniforms["model"].location, 1, gl.FALSE, &model[0,0])
-
-
-
-    // gl.BindVertexArray(test_chunk.vao)
-    // gl.DrawElements(gl.TRIANGLES, 2048, gl.UNSIGNED_INT, nil)
    
     for key, &chunk in chunk_map{
         chunk_render(&chunk) 
     } 
     
     
-    
+
     sdl2.GL_SwapWindow(window)
 }
 
