@@ -1,4 +1,7 @@
 mods/
 odin/
+config.txt
+renderdoc.cap
 *.exe
+*.bin
 *.pdb
