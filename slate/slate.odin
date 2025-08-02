@@ -170,12 +170,11 @@ main :: proc() {
             iterator := string(config_file)
 
             for config in strings.split_lines_iterator(&iterator){
-                config_parse(config)
+                config_parse(config[:len(config)])
             }
         }
         for arg in os.args{
             if arg[0] == '-' && strings.contains_rune(arg, '=') {
-                console_log(.DEBUG, "%s", arg[1:])
                 config_parse(arg[1:])
             }
         }
@@ -285,7 +284,7 @@ task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, repeat
     sync.guard(&tpool.mutex) 
     tpool.tasks[name] = {name, .WAITING, repeat, context.allocator, task,  slice.clone(dependencies)}
     topological_sort.add_key(&tpool.task_sorter, name)
-    tpool.is_sorted = false;
+    tpool.is_sorted = false
 
     if(dependencies != nil){
         for dependency in dependencies{
@@ -300,10 +299,12 @@ task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, repeat
 
 @private
 task_add_repeated :: proc"c"(name: string, pool: string, task: task_proc,  dependencies: []string){
+    // console_log(.DEBUG, "Adding repeated task %s to pool %s", name, pool)
     task_add_internal(name, pool, task, true, dependencies)
 }
 @private
 task_add_once:: proc"c"(name: string, pool: string, task: task_proc,  dependencies: []string){
+    // console_log(.DEBUG, "Adding task %s to pool %s", name, pool)
     task_add_internal(name, pool, task, false, dependencies)
 }
 
@@ -398,12 +399,12 @@ task_execute :: proc(pool: ^task_pool){
 
 @private
 config_set :: proc"c"(cfg : config) {
+    context = runtime.default_context()
     if str, is_string := cfg.value.(string); is_string{
-        context = runtime.default_context()
-        configuration[cfg.key] = {cfg.key, strings.clone(str)} 
+        configuration[strings.clone(cfg.key)] = {cfg.key, strings.clone(str)} 
         return
     }
-    configuration[cfg.key] = cfg
+    configuration[strings.clone(cfg.key)] = cfg
 }
 
 
@@ -425,11 +426,22 @@ config_parse :: proc(text : string) {
     if len(string_portions) < 2{
         return
     }
+    console_log(.DEBUG, "%s - %s", string_portions[0], string_portions[1])
     key := string_portions[0]
     value_string := string_portions[1]
 
-    if strings.compare(value_string, "true") == 0{config_set({key, true})}
-    if strings.compare(value_string, "false")== 0{config_set({key, false})}
+    if strings.contains_rune(value_string, '"'){ 
+        config_set({key, value_string})
+        return
+    }
+    if strings.compare(value_string, "true") == 0{
+        config_set({key, true}) 
+        return
+    }
+    if strings.compare(value_string, "false")== 0{
+        config_set({key, false}) 
+        return
+    }
 
     if floating, ok := strconv.parse_f64(value_string); ok{
         config_set({key, floating})
@@ -484,8 +496,7 @@ console_log :: proc"c"(category: log_category, format: string, args: ..any, modu
     fmt.fprint(os.stderr, strings.to_string(message))
 //    if os.is_file_handle(log_file){
 //        fmt.fprint(log_file, strings.to_string(message))
-//    }
-    
+//    } 
 }
 @private 
 c_console_log :: proc"c"(category: log_category, text: cstring){
@@ -563,7 +574,6 @@ quit :: proc"c"(status: int){
         context = runtime.default_context()
 
         config_file, error := os.open("config.txt", os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0o777)
-
         if error == os.ERROR_NONE{
             for key in configuration{
                 config := configuration[key]
