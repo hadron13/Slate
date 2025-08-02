@@ -16,6 +16,11 @@ import "core:math/linalg"
 import "core:math/noise"
 import stb "vendor:stb/image"
 
+DISABLE_DOCKING :: #config(DISABLE_DOCKING, false)
+import imgui "imgui"
+import imgui_sdl2 "imgui/imgui_impl_sdl2"
+import imgui_opengl "imgui/imgui_impl_opengl3"
+
 
 
 MODULE :: #config(MOD, "Render")
@@ -281,6 +286,32 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     core.log(.INFO, "loaded OpenGL version %s", gl.GetString(gl.VERSION))
     core.log(.INFO, "vendor: %s", gl.GetString(gl.VENDOR) )
 
+
+
+
+    imgui.CHECKVERSION()
+    imgui.CreateContext()
+
+	io := imgui.GetIO()
+	io.ConfigFlags += {.NavEnableKeyboard, .NavEnableGamepad}
+	when !DISABLE_DOCKING {
+		io.ConfigFlags += {.DockingEnable}
+		io.ConfigFlags += {.ViewportsEnable}
+
+		style := imgui.GetStyle()
+		style.WindowRounding = 0
+		style.Colors[imgui.Col.WindowBg].w =1
+	}
+
+    imgui.StyleColorsDark()
+
+	imgui_sdl2.InitForOpenGL(window, gl_context)
+	imgui_opengl.Init(nil)
+
+
+
+
+
     gl.Enable(gl.DEPTH_TEST)
     gl.Enable(gl.CULL_FACE)
     gl.CullFace(gl.FRONT)
@@ -313,7 +344,7 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     gl.BindBuffer(gl.ARRAY_BUFFER, 0);
     gl.BindVertexArray(0)
 
-    img :: #load("textures/renatoemperra.png", string)
+    img :: #load("textures/jumento.png", string)
 
 	gl.GenTextures(1, &test_texture)
 	gl.BindTexture(gl.TEXTURE_2D_ARRAY, test_texture)
@@ -329,13 +360,13 @@ start :: proc"c"(core_interface : ^slate.core_interface){
 
     stb.set_flip_vertically_on_load(1)
 
-    gl.TexImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.SRGB8_ALPHA8, 320, 320, i32(len(datas)), 0, gl.RGBA, gl.UNSIGNED_BYTE, nil)
+    gl.TexImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.SRGB8_ALPHA8, 160, 160, i32(len(datas)), 0, gl.RGBA, gl.UNSIGNED_BYTE, nil)
 
     width, height, channels: i32
 
 	for tex, idx in datas {
 		pixels := stb.load_from_memory(raw_data(tex), i32(len(tex)), &width, &height, &channels, 4)
-		gl.TexSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i32(idx), 320, 320, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+		gl.TexSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i32(idx), 160, 160, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
 		stb.image_free(pixels)
 	}
     gl.GenerateMipmap(gl.TEXTURE_2D_ARRAY)
@@ -348,7 +379,7 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     
 
     sdl2.SetRelativeMouseMode(true)
-    main_camera = {{0, 0, -2}, {0, 0, 0}, -90, 0, 90}
+    main_camera = {{0, 8, 0}, {0, 0, 0}, -90, 0, 90}
 
 }
 
@@ -356,11 +387,14 @@ input :: proc"c"(core : ^slate.core_interface){
     event: sdl2.Event
     for ;sdl2.PollEvent(&event);{
         #partial switch(event.type){
-            case .QUIT:
-                sdl2.GL_DeleteContext(gl_context)
-                sdl2.DestroyWindow(window)
-                sdl2.Quit()
-                core.quit(0)
+        case .QUIT:
+            imgui_opengl.Shutdown()
+            imgui_sdl2.Shutdown()
+            imgui.DestroyContext()
+            sdl2.GL_DeleteContext(gl_context)
+            sdl2.DestroyWindow(window)
+            sdl2.Quit()
+            core.quit(0)
         
         case .KEYDOWN:
             #partial switch(event.key.keysym.sym){
@@ -398,11 +432,25 @@ input :: proc"c"(core : ^slate.core_interface){
                 main_camera.pitch = math.clamp(main_camera.pitch, -89.9, 89.9)
             }
         }
+        imgui_sdl2.ProcessEvent(&event)
     }
 }
 
 render :: proc"c"(core : ^slate.core_interface){
- 
+
+    imgui_opengl.NewFrame()
+    imgui_sdl2.NewFrame()
+    imgui.NewFrame()
+
+    imgui.ShowDemoWindow(nil)
+
+    // if imgui.Begin("Window containing a quit button") {
+    // }
+    // imgui.End()
+
+    imgui.Render()
+
+
 
     gl.ClearColor(0.04, 0.76, 0.94, 1.0)
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
@@ -421,7 +469,16 @@ render :: proc"c"(core : ^slate.core_interface){
         chunk_render(&chunk) 
     } 
     
-    
+    imgui_opengl.RenderDrawData(imgui.GetDrawData())
+
+    when !DISABLE_DOCKING {
+        backup_current_window := sdl2.GL_GetCurrentWindow()
+        backup_current_context := sdl2.GL_GetCurrentContext()
+        imgui.UpdatePlatformWindows()
+        imgui.RenderPlatformWindowsDefault()
+        sdl2.GL_MakeCurrent(backup_current_window, backup_current_context);
+    }
+
 
     sdl2.GL_SwapWindow(window)
 }
