@@ -399,6 +399,8 @@ task_execute :: proc(pool: ^task_pool){
 
 @private
 config_set :: proc"c"(cfg : config) {
+    @(static) mutex : sync.Mutex
+    sync.guard(&mutex)
     context = runtime.default_context()
     if str, is_string := cfg.value.(string); is_string{
         configuration[strings.clone(cfg.key)] = {cfg.key, strings.clone(str)} 
