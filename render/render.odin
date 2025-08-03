@@ -77,11 +77,12 @@ render_interface :: struct{
 
 
 chunk:: struct{
-    blocks    : [CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE]u32,
     vao, vbo  : u32,
     offset    : [3]i32,
     transform : glm.mat4,    
 }
+
+
 
 
 @export
@@ -140,21 +141,13 @@ chunk_create :: proc(position : [3]i32) -> chunk{
     chunk.offset = position
     chunk.transform = glm.mat4Translate(linalg.to_f32(position * CHUNK_SIZE))//glm.identity(glm.mat4)
 
-    for x := 0; x < CHUNK_SIZE ; x+=1{
-        for z := 0; z < CHUNK_SIZE ; z+=1{
-            height := noise.noise_2d(9234, {f64(x+int(position.x)*CHUNK_SIZE)/8, f64(z+int(position.z)*CHUNK_SIZE)/8})
-            for y := 0; y < CHUNK_SIZE ; y+=1{
-                if(y < int(height * 3)+4) do chunk.blocks[x][y][z]= 1
-            }
-        }
-    }
+    world_chunk := world.get_chunk(world.get_world(""), position)
 
     start := sdl2.GetPerformanceCounter()
     
-    vertices:= chunk_mesh(&chunk)
+    vertices:= chunk_mesh(&(world_chunk.blocks))
 
     end := sdl2.GetPerformanceCounter()
-    // core.log(.DEBUG, "%fms for a %i^3 chunk", f64(end-start)/f64(sdl2.GetPerformanceFrequency()/1000), CHUNK_SIZE)
 
     gl.GenVertexArrays(1, &chunk.vao)
     gl.GenBuffers(1, &chunk.vbo)
@@ -201,31 +194,31 @@ append_quad :: #force_inline proc(vertices : ^[dynamic]f32, a, b, c, d : [5]f32)
 
 CHUNK_SIZE :: 16
 
-chunk_mesh :: proc(chunk : ^chunk) -> []f32{
+chunk_mesh :: proc(blocks: ^[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE]u32) -> []f32{
     vertices := make([dynamic]f32, 0, 2048 * 3)
 
     for x := 0; x < CHUNK_SIZE ; x+=1{
         for y := 0; y < CHUNK_SIZE ; y+=1{
             for z := 0; z < CHUNK_SIZE ; z+=1{ 
-                if chunk.blocks[x][y][z] == 0 do continue 
+                if blocks[x][y][z] == 0 do continue 
 
-                if x == 0 || chunk.blocks[x-1][y][z] == 0{
+                if x == 0 || blocks[x-1][y][z] == 0{
                     append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0}, {0, 1, 0, 0, 1}, {0, 0, 1, 1, 0}, {0, 1, 1, 1, 1})
                 }
-                if y == 0 || chunk.blocks[x][y-1][z] == 0{
+                if y == 0 || blocks[x][y-1][z] == 0{
                     append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0}, {0, 0, 1, 0, 1}, {1, 0, 0, 1, 0}, {1, 0, 1, 1, 1})
                 }
-                if z == 0 || chunk.blocks[x][y][z-1] == 0{
+                if z == 0 || blocks[x][y][z-1] == 0{
                     append_quad(&vertices, {f32(x), f32(y), f32(z), 1, 0}, {1, 0, 0, 0, 0}, {0, 1, 0, 1, 1}, {1, 1, 0, 0, 1})
                 }
 
-                if x == CHUNK_SIZE-1 || chunk.blocks[x+1][y][z] == 0{
+                if x == CHUNK_SIZE-1 || blocks[x+1][y][z] == 0{
                     append_quad(&vertices, {f32(x)+1, f32(y), f32(z), 1, 0}, {0, 0, 1, 0, 0}, {0, 1, 0, 1, 1}, {0, 1, 1, 0, 1})
                 }
-                if y == CHUNK_SIZE-1 || chunk.blocks[x][y+1][z] == 0{
+                if y == CHUNK_SIZE-1 || blocks[x][y+1][z] == 0{
                     append_quad(&vertices, {f32(x), f32(y)+1, f32(z), 0, 0}, {1, 0, 0, 0, 1}, {0, 0, 1, 1, 0}, {1, 0, 1, 1, 1})
                 }
-                if z == CHUNK_SIZE-1 || chunk.blocks[x][y][z+1] == 0{
+                if z == CHUNK_SIZE-1 || blocks[x][y][z+1] == 0{
                     append_quad(&vertices, {f32(x), f32(y), f32(z)+1, 0, 0}, {0, 1, 0, 0, 1}, {1, 0, 0, 1, 0}, {1, 1, 0, 1, 1})
                 }
             }

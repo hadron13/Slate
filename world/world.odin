@@ -11,6 +11,7 @@ MODULE :: #config(MOD, "World")
 import "../slate"
 
 
+import "interface"
 
 block_id :: u32
 block_pos :: [3]i32
@@ -29,16 +30,7 @@ world :: struct{
 }
 
 
-world_interface :: struct{
-    size : u64,
-    version : slate.version,
-    get_world : proc"c"(name  : string) -> ^world,
-    get_chunk : proc"c"(world : ^world, position : chunk_pos) -> ^chunk,
-    get_block : proc"c"(world : ^world, position : block_pos) -> block_id,
-    set_block : proc"c"(world : ^world, position : block_pos, id: block_id),
-}
-
-
+core : ^slate.core_interface
 test_world : world 
 
 get_world :: proc"c"(name  : string) -> ^world{
@@ -71,23 +63,24 @@ set_block :: proc"c"(world : ^world, position : block_pos, id: block_id){
     chunk.blocks[position.x][position.y][position.z] = id
 }
 
-interface : world_interface
+world_interface : interface.world_interface
 
 @export
-load :: proc"c"(core : ^slate.core_interface) -> slate.version{
+load :: proc"c"(core_interface : ^slate.core_interface) -> slate.version{
+    core = core_interface
     context = runtime.default_context()
 
-    interface = {
-        size_of(world_interface),
+    world_interface = {
+        size_of(interface.world_interface),
         {0, 0, 1},
-        get_world,
-        get_chunk,
-        get_block,
-        set_block
+        auto_cast get_world,
+        auto_cast get_chunk,
+        auto_cast get_block,
+        auto_cast set_block
     }
 
-    core.task_add_repeated("world/generate", "main", generate, nil)
-    core.module_set_interface("world", auto_cast(&interface))
+    core.task_add_once("world/generate", "main", generate, nil)
+    core.module_set_interface("world", auto_cast(&world_interface))
     return {0, 0, 1}
 }
 
