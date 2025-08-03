@@ -22,5 +22,6 @@ pkgs.mkShell.override { stdenv = pkgs.clangStdenv; }
     SDL2
     odin
     ols
+    libcxx
   ];  
 }
