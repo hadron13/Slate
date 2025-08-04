@@ -416,7 +416,16 @@ input :: proc"c"(core : ^slate.core_interface){
                 main_camera.pitch -= cast(f32)event.motion.yrel * 0.2
                 main_camera.pitch = math.clamp(main_camera.pitch, -89.9, 89.9)
             }
+        case .WINDOWEVENT:
+            #partial switch(event.window.event){
+                case .RESIZED:
+                    width, height : c.int
+                    sdl2.GetWindowSize(window, &width, &height)
+                    gl.Viewport(0, 0, width, height)
+
+            }   
         }
+
         imgui_sdl2.ProcessEvent(&event)
     }
 }
@@ -441,7 +450,9 @@ render :: proc"c"(core : ^slate.core_interface){
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
    
 
-    projection := glm.mat4PerspectiveInfinite(main_camera.fov, 800/640, 0.01)
+    width, height : c.int
+    sdl2.GetWindowSize(window, &width, &height)
+    projection := glm.mat4PerspectiveInfinite(main_camera.fov, f32(width)/f32(height), 0.01)
     view := camera_update(&main_camera, 1.0)
     model := glm.identity(glm.mat4)
     
