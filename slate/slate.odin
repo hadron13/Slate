@@ -40,7 +40,7 @@ module_interface :: distinct rawptr
 @private
 module :: struct{
     name              : string,
-    version    : version,
+    version           : version,
     interface         : module_interface,
     library           : dynlib.Library,
     dependencies      : []string,
@@ -93,7 +93,6 @@ core_interface :: struct{
     c_log       : proc"c"(category: log_category, text: cstring),
     //MODULES
     module_set_interface: proc"c"(name: string, interface: module_interface),  
-    module_set_version  : proc"c"(name: string, version : version),            
     module_get_interface: proc"c"(name: string) -> module_interface,      
     module_get_version  : proc"c"(name: string) -> version,             
     module_reload       : proc"c"(name: string), // hot-reloads module, optionally calling a reload() procedure   
@@ -102,6 +101,7 @@ core_interface :: struct{
     task_add_repeated   : proc"c"(name: string, pool: string, task: task_proc,  dependencies: []string),
     task_add_once       : proc"c"(name: string, pool: string, task: task_proc,  dependencies: []string),
     //MISC 
+    on_quit             : proc"c"(callback : proc"c"(status : int)),
     quit                : proc"c"(status: int) 
 }
 
@@ -117,7 +117,10 @@ task_pools    : map[string]task_pool
 log_level     : log_category
 @private
 interface     : core_interface
-
+@private 
+quit_callbacks: [dynamic]proc"c"(int)
+@private 
+core_context  : runtime.Context
 
 @private
 main :: proc() {
@@ -146,13 +149,13 @@ main :: proc() {
         console_log,
         c_console_log,
         interface_set,
-        version_set,
         interface_get,
         version_get,
         nil,
         task_add_pool,
         task_add_repeated,
         task_add_once,
+        on_quit,
         quit,
     }
 
@@ -531,12 +534,6 @@ interface_set :: proc"c"(name : string, interface: module_interface){
         value.interface = interface
     }
 }
-@private
-version_set :: proc"c"(name : string, version: version){
-    if value, ok := &modules[name]; ok { 
-        value.version = version
-    }
-}
 
 @private
 interface_get :: proc"c"(name : string) -> module_interface{
@@ -568,6 +565,13 @@ code_inject :: proc"c"(file: os.Handle, offset: i64 , padding: int, procedure: u
     } 
 }
 
+@private 
+on_quit :: proc"c"(callback : proc"c"(status : int)){
+    context = runtime.default_context()
+    append(&quit_callbacks, callback)
+}
+
+
 @private
 quit :: proc"c"(status: int){ 
 
@@ -590,6 +594,9 @@ quit :: proc"c"(status: int){
         }else{
             console_log(.ERROR, "could not open config.txt file, %i", os.get_last_error())
         }
+    }
+    for callback in quit_callbacks{
+        callback(status)
     }
 
     os.exit(status)        

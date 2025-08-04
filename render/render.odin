@@ -93,7 +93,6 @@ load :: proc"c"(core : ^slate.core_interface) -> slate.version{
     core.task_add_repeated("render/input", "render", input, {"render/start"})
     core.task_add_repeated("render/render", "render", render, {"render/input"})
 
-    core.module_set_version("render", {0, 0, 1})
 
     return {0, 0, 1}
 }
@@ -302,7 +301,7 @@ start :: proc"c"(core_interface : ^slate.core_interface){
 	imgui_opengl.Init(nil)
 
 
-
+    core.on_quit(quit)
 
 
     gl.Enable(gl.DEPTH_TEST)
@@ -344,7 +343,7 @@ start :: proc"c"(core_interface : ^slate.core_interface){
 	gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT)
 	gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT)
 	gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
-	gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 
    
     datas :[]string= {
@@ -381,14 +380,7 @@ input :: proc"c"(core : ^slate.core_interface){
     for ;sdl2.PollEvent(&event);{
         #partial switch(event.type){
         case .QUIT:
-            imgui_opengl.Shutdown()
-            imgui_sdl2.Shutdown()
-            imgui.DestroyContext()
-            sdl2.GL_DeleteContext(gl_context)
-            sdl2.DestroyWindow(window)
-            sdl2.Quit()
-            core.quit(0)
-        
+            core.quit(0) 
         case .KEYDOWN:
             #partial switch(event.key.keysym.sym){
             case .w: main_camera.velocity.z = -0.1
@@ -477,5 +469,17 @@ render :: proc"c"(core : ^slate.core_interface){
 }
 
 render_chunks :: proc"c"(core : ^slate.core_interface){
+
+}
+
+quit :: proc"c"(status : int){
+    core.log(.INFO, "shutting down renderer")
+
+    imgui_opengl.Shutdown()
+    imgui_sdl2.Shutdown()
+    imgui.DestroyContext()
+    sdl2.GL_DeleteContext(gl_context)
+    sdl2.DestroyWindow(window)
+    sdl2.Quit()
 
 }
