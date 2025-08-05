@@ -2,6 +2,7 @@ mods/
 odin/
 config.txt
 renderdoc.cap
+imgui.ini
 *.exe
 *.bin
 *.pdb

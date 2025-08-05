@@ -1,5 +1,6 @@
 @echo off
 mkdir mods\render
+mkdir mods\world
 
 :: For when quick_setup.bat is used
 set PATH=%PATH%;.\odin
@@ -7,6 +8,7 @@ set PATH=%PATH%;.\odin
 echo building...
 
 odin build render -out:mods/render/render.dll -build-mode:shared -debug
+odin build world -out:mods/world/world.dll -build-mode:shared -debug
 odin build slate -out:slate.exe -debug
 
 
