@@ -108,7 +108,6 @@ quad_ebo : u32
 
 test_texture : u32
 test_shader : u32
-test_chunk : chunk
 test_shader_uniforms : map[string]gl.Uniform_Info
 main_camera : camera
 
@@ -336,7 +335,7 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     gl.BindBuffer(gl.ARRAY_BUFFER, 0);
     gl.BindVertexArray(0)
 
-    img :: #load("textures/jumento.png", string)
+    img :: #load("textures/stone.png", string)
 
 	gl.GenTextures(1, &test_texture)
 	gl.BindTexture(gl.TEXTURE_2D_ARRAY, test_texture)
@@ -352,13 +351,13 @@ start :: proc"c"(core_interface : ^slate.core_interface){
 
     stb.set_flip_vertically_on_load(1)
 
-    gl.TexImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.SRGB8_ALPHA8, 160, 160, i32(len(datas)), 0, gl.RGBA, gl.UNSIGNED_BYTE, nil)
+    gl.TexImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA, 64, 64, i32(len(datas)), 0, gl.RGBA, gl.UNSIGNED_BYTE, nil)
 
-    width, height, channels: i32
+    width, height, channels: i32 
 
 	for tex, idx in datas {
 		pixels := stb.load_from_memory(raw_data(tex), i32(len(tex)), &width, &height, &channels, 4)
-		gl.TexSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i32(idx), 160, 160, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+		gl.TexSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i32(idx), 64, 64, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
 		stb.image_free(pixels)
 	}
     gl.GenerateMipmap(gl.TEXTURE_2D_ARRAY)
@@ -391,7 +390,7 @@ input :: proc"c"(core : ^slate.core_interface){
             case .SPACE: main_camera.velocity.y = 0.1
             case .c: main_camera.velocity.y =    -0.1
             
-            case .z: main_camera.fov = 20
+            case .z: main_camera.fov = 60
             }
         case .KEYUP:
             #partial switch(event.key.keysym.sym){
@@ -436,11 +435,12 @@ render :: proc"c"(core : ^slate.core_interface){
     imgui_sdl2.NewFrame()
     imgui.NewFrame()
 
-    imgui.ShowDemoWindow(nil)
+    // imgui.ShowDemoWindow(nil)
 
-    // if imgui.Begin("Window containing a quit button") {
-    // }
-    // imgui.End()
+    if imgui.Begin("Debug Window") {
+        imgui.SliderFloat("FOV", &main_camera.fov, 5.0, 179.0)
+    }
+    imgui.End()
 
     imgui.Render()
 
@@ -452,7 +452,7 @@ render :: proc"c"(core : ^slate.core_interface){
 
     width, height : c.int
     sdl2.GetWindowSize(window, &width, &height)
-    projection := glm.mat4PerspectiveInfinite(main_camera.fov, f32(width)/f32(height), 0.01)
+    projection := glm.mat4PerspectiveInfinite(main_camera.fov * math.RAD_PER_DEG, f32(width)/f32(height), 0.01)
     view := camera_update(&main_camera, 1.0)
     model := glm.identity(glm.mat4)
     
