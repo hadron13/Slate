@@ -1,6 +1,7 @@
 @echo off
 mkdir mods\render
 mkdir mods\world
+mkdir mods\render\shaders
 
 :: For when quick_setup.bat is used
 set PATH=%PATH%;.\odin
@@ -11,6 +12,8 @@ odin build render -out:mods/render/render.dll -build-mode:shared -debug
 odin build world -out:mods/world/world.dll -build-mode:shared -debug
 odin build slate -out:slate.exe -debug
 
+echo copying shaders...
+copy render\shaders mods\render\shaders
 
 set SDL2_DEST=mods\render\SDL2.dll
 
@@ -29,3 +32,4 @@ for /f "delims=" %%i in ('where odin') do (
 :copy
 echo copying SDL2 DLL...
 copy "%SDL2_SRC%" "%SDL2_DEST%"
+
