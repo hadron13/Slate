@@ -245,6 +245,9 @@ main :: proc() {
             (&modules[listed_mod.name]).version = mod_version
         }
     }
+    for key, &pool in task_pools{
+        task_pool_run(&pool)
+    }
     task_runner_thread(&task_pools["main"])
 
     when ODIN_DEBUG{
@@ -267,13 +270,17 @@ task_add_pool :: proc"c"(name: string, threads: u32){
     pool.is_running= true 
     pool.task_index= 0
 
-    sync.guard(&pool.mutex)
     pool.threads = make([]^thread.Thread, max(threads, 1))
+    topological_sort.init(&pool.task_sorter)
+}
+
+task_pool_run :: proc "c"(pool : ^task_pool){
+    context = runtime.default_context()
     for _, i in pool.threads{
         pool.threads[i] = thread.create_and_start_with_data(pool, task_runner_thread)
 	}
-    topological_sort.init(&pool.task_sorter)
 }
+
 @private
 task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, repeat: bool,  dependencies: []string){
     context = runtime.default_context()
