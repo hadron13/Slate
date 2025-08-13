@@ -1,9 +1,9 @@
 #version 330
 
-in vec2 texCoord;
+in vec3 texCoord;
 
 uniform sampler2DArray tex;
 
 void main(){
-    gl_FragColor = texture(tex, vec3(texCoord, 0));
+    gl_FragColor = texture(tex, texCoord);
 }

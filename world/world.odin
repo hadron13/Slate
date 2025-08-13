@@ -103,7 +103,9 @@ chunk_generate :: proc"c"(seed : i64, position : chunk_pos) -> chunk{
         for z := 0; z < CHUNK_SIZE ; z+=1{
             height := noise.noise_2d(seed, {f64(x+int(position.x)*CHUNK_SIZE)/16, f64(z+int(position.z)*CHUNK_SIZE)/16})
             for y := 0; y < CHUNK_SIZE ; y+=1{
-                if(y < int(height * 3)+4) do chunk.blocks[x][y][z]= 1
+                if(y < int(height * 3) + 4){
+                    chunk.blocks[x][y][z] = (height  > 0.5)?1:2
+                } 
             }
         }
     }

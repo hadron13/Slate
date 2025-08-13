@@ -167,9 +167,9 @@ chunk_create :: proc(position : [3]i32) -> chunk{
 
 
     
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * size_of(f32), 0)
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 6 * size_of(f32), 0)
     gl.EnableVertexAttribArray(0)
-    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 5 * size_of(f32), 3 * size_of(f32))
+    gl.VertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 6 * size_of(f32), 3 * size_of(f32))
     gl.EnableVertexAttribArray(1)
 
     gl.BindVertexArray(0)
@@ -180,12 +180,12 @@ chunk_create :: proc(position : [3]i32) -> chunk{
 
 
 //vertex format: XYZ - UV
-append_quad :: #force_inline proc(vertices : ^[dynamic]f32, a, b, c, d : [5]f32){
+append_quad :: #force_inline proc(vertices : ^[dynamic]f32, a, b, c, d : [6]f32){
     
-    append(vertices, a[0], a[1], a[2], a[3], a[4])
-    append(vertices, b[0] + a[0], b[1] + a[1], b[2] + a[2], b[3], b[4])
-    append(vertices, c[0] + a[0], c[1] + a[1], c[2] + a[2], c[3], c[4])
-    append(vertices, d[0] + a[0], d[1] + a[1], d[2] + a[2], d[3], d[4])
+    append(vertices, a[0], a[1], a[2], a[3], a[4], a[5])
+    append(vertices, b[0] + a[0], b[1] + a[1], b[2] + a[2], b[3], b[4], b[5])
+    append(vertices, c[0] + a[0], c[1] + a[1], c[2] + a[2], c[3], c[4], c[5])
+    append(vertices, d[0] + a[0], d[1] + a[1], d[2] + a[2], d[3], d[4], d[5])
     
     // append(indices, last_vert, last_vert+1, last_vert+2, last_vert+2, last_vert+1, last_vert+3)
 }
@@ -200,24 +200,27 @@ chunk_mesh :: proc(blocks: ^[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE]u32) -> []f32{
             for z := 0; z < CHUNK_SIZE ; z+=1{ 
                 if blocks[x][y][z] == 0 do continue 
 
+                tex_id := cast(f32)blocks[x][y][z] -1
+
                 if x == 0 || blocks[x-1][y][z] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0}, {0, 1, 0, 0, 1}, {0, 0, 1, 1, 0}, {0, 1, 1, 1, 1})
+                                          //  X       Y       Z     U  V 
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id}, {0, 1, 0, 0, 1, tex_id}, {0, 0, 1, 1, 0, tex_id}, {0, 1, 1, 1, 1, tex_id})
                 }
                 if y == 0 || blocks[x][y-1][z] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0}, {0, 0, 1, 0, 1}, {1, 0, 0, 1, 0}, {1, 0, 1, 1, 1})
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id}, {0, 0, 1, 0, 1, tex_id}, {1, 0, 0, 1, 0, tex_id}, {1, 0, 1, 1, 1, tex_id})
                 }
                 if z == 0 || blocks[x][y][z-1] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 1, 0}, {1, 0, 0, 0, 0}, {0, 1, 0, 1, 1}, {1, 1, 0, 0, 1})
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 1, 0, tex_id}, {1, 0, 0, 0, 0, tex_id}, {0, 1, 0, 1, 1, tex_id}, {1, 1, 0, 0, 1, tex_id})
                 }
 
                 if x == CHUNK_SIZE-1 || blocks[x+1][y][z] == 0{
-                    append_quad(&vertices, {f32(x)+1, f32(y), f32(z), 1, 0}, {0, 0, 1, 0, 0}, {0, 1, 0, 1, 1}, {0, 1, 1, 0, 1})
+                    append_quad(&vertices, {f32(x)+1, f32(y), f32(z), 1, 0, tex_id}, {0, 0, 1, 0, 0, tex_id}, {0, 1, 0, 1, 1, tex_id}, {0, 1, 1, 0, 1, tex_id})
                 }
                 if y == CHUNK_SIZE-1 || blocks[x][y+1][z] == 0{
-                    append_quad(&vertices, {f32(x), f32(y)+1, f32(z), 0, 0}, {1, 0, 0, 0, 1}, {0, 0, 1, 1, 0}, {1, 0, 1, 1, 1})
+                    append_quad(&vertices, {f32(x), f32(y)+1, f32(z), 0, 0, tex_id}, {1, 0, 0, 0, 1, tex_id}, {0, 0, 1, 1, 0, tex_id}, {1, 0, 1, 1, 1, tex_id})
                 }
                 if z == CHUNK_SIZE-1 || blocks[x][y][z+1] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z)+1, 0, 0}, {0, 1, 0, 0, 1}, {1, 0, 0, 1, 0}, {1, 1, 0, 1, 1})
+                    append_quad(&vertices, {f32(x), f32(y), f32(z)+1, 0, 0, tex_id}, {0, 1, 0, 0, 1, tex_id}, {1, 0, 0, 1, 0, tex_id}, {1, 1, 0, 1, 1, tex_id})
                 }
             }
         }
@@ -270,7 +273,9 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     }
     core.log(.INFO, "successfully created an OpenGL context")
 
-    sdl2.GL_SetSwapInterval(-1)
+    if(sdl2.GL_SetSwapInterval(-1) == -1){
+        sdl2.GL_SetSwapInterval(1)
+    }
 
     gl.load_up_to(3, 3, sdl2.gl_set_proc_address)
 
@@ -335,7 +340,6 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     gl.BindBuffer(gl.ARRAY_BUFFER, 0);
     gl.BindVertexArray(0)
 
-    img :: #load("textures/stone.png", string)
 
 	gl.GenTextures(1, &test_texture)
 	gl.BindTexture(gl.TEXTURE_2D_ARRAY, test_texture)
@@ -346,7 +350,8 @@ start :: proc"c"(core_interface : ^slate.core_interface){
 
    
     datas :[]string= {
-        img
+        #load("textures/stone.png", string),
+        #load("textures/snad.png", string)
     }
 
     stb.set_flip_vertically_on_load(1)
@@ -436,9 +441,12 @@ render :: proc"c"(core : ^slate.core_interface){
     imgui.NewFrame()
 
     // imgui.ShowDemoWindow(nil)
+    @static 
+    camera_speed :f32= 1.0
 
     if imgui.Begin("Debug Window") {
         imgui.SliderFloat("FOV", &main_camera.fov, 5.0, 179.0)
+        imgui.SliderFloat("Speed", &camera_speed, 0.1, 10.0)
     }
     imgui.End()
 
@@ -453,7 +461,7 @@ render :: proc"c"(core : ^slate.core_interface){
     width, height : c.int
     sdl2.GetWindowSize(window, &width, &height)
     projection := glm.mat4PerspectiveInfinite(main_camera.fov * math.RAD_PER_DEG, f32(width)/f32(height), 0.01)
-    view := camera_update(&main_camera, 1.0)
+    view := camera_update(&main_camera, 1.0 * camera_speed)
     model := glm.identity(glm.mat4)
     
     gl.UseProgram(test_shader)

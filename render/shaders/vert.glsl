@@ -1,9 +1,9 @@
 #version 330
 
 layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec2 aTexCoord;
+layout (location = 1) in vec3 aTexCoord;
 
-out vec2 texCoord;
+out vec3 texCoord;
 
 uniform mat4 model;
 uniform mat4 view;
