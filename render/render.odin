@@ -253,6 +253,8 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     sdl2.GL_SetAttribute(sdl2.GLattr.CONTEXT_MAJOR_VERSION, 3)
     sdl2.GL_SetAttribute(sdl2.GLattr.CONTEXT_MINOR_VERSION, 3)
     sdl2.GL_SetAttribute(sdl2.GLattr.CONTEXT_PROFILE_MASK, i32(sdl2.GLprofile.CORE))
+
+    sdl2.GL_SetAttribute(sdl2.GLattr.DEPTH_SIZE, 24)
     
     window_name := core.config_get_string("render/window/name", "Slate")
     window_width := core.config_get_int("render/window/width", 800)
@@ -395,7 +397,7 @@ input :: proc"c"(core : ^slate.core_interface){
             case .SPACE: main_camera.velocity.y = 0.1
             case .c: main_camera.velocity.y =    -0.1
             
-            case .z: main_camera.fov = 60
+            case .z: main_camera.fov = 20
             }
         case .KEYUP:
             #partial switch(event.key.keysym.sym){
