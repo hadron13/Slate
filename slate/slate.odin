@@ -148,9 +148,9 @@ main :: proc() {
         config_get_bool,
         console_log,
         c_console_log,
-        interface_set,
-        interface_get,
-        version_get,
+        module_set_interface,
+        module_get_interface,
+        module_get_version,
         nil,
         task_add_pool,
         task_add_repeated,
@@ -536,19 +536,19 @@ c_console_log :: proc"c"(category: log_category, text: cstring){
 }
 
 @private
-interface_set :: proc"c"(name : string, interface: module_interface){
+module_set_interface :: proc"c"(name : string, interface: module_interface){
     if value, ok := &modules[name]; ok { 
         value.interface = interface
     }
 }
 
 @private
-interface_get :: proc"c"(name : string) -> module_interface{
+module_get_interface :: proc"c"(name : string) -> module_interface{
     return modules[name].interface
 }
 
 @private
-version_get :: proc"c"(name : string) -> version{
+module_get_version :: proc"c"(name : string) -> version{
     return modules[name].version
 }
 
