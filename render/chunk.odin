@@ -14,16 +14,23 @@ import glm "core:math/linalg/glsl"
 import "core:math/linalg"
 import stb "vendor:stb/image"
 
-chunk_create :: proc(position : [3]i32) -> chunk{
-    
-    chunk : chunk
+chunk_map : map[[3]i32]chunk
+quad_ebo : u32
+
+chunk_create :: proc(position : [3]i32) { 
+    world_chunk := world.get_chunk(world.get_world(""), position)
+    if world_chunk == nil{
+        return
+    }
+
+    chunk_map[position] = {}
+
+    chunk := &chunk_map[position]
 
     chunk.offset = position
     chunk.transform = glm.mat4Translate(linalg.to_f32(position * CHUNK_SIZE))
 
-    world_chunk := world.get_chunk(world.get_world(""), position)
-
-    
+ 
     vertices:= chunk_mesh(&(world_chunk.blocks))
 
 
@@ -53,8 +60,6 @@ chunk_create :: proc(position : [3]i32) -> chunk{
     gl.EnableVertexAttribArray(1)
 
     gl.BindVertexArray(0)
-
-    return chunk
 
 }
 

@@ -89,9 +89,9 @@ chunk:: struct{
 load :: proc"c"(core : ^slate.core_interface) -> slate.version{
     context = runtime.default_context()
     core.task_add_pool("render", 1)
-    core.task_add_once("render/start", "render", start, nil)
-    core.task_add_repeated("render/input", "render", input, {"render/start"})
-    core.task_add_repeated("render/render", "render", render, {"render/input"})
+    core.task_add_once("render/start", "render", start, nil, nil)
+    core.task_add_repeated("render/input", "render", input, nil, {"render/start"})
+    core.task_add_repeated("render/render", "render", render, nil, {"render/input"})
 
 
     return {0, 0, 1}
@@ -102,11 +102,7 @@ gl_context : sdl2.GLContext
 core  : ^slate.core_interface
 world : ^world_interface.world_interface
 
-chunk_map : map[[3]i32]chunk
-
-quad_ebo : u32
-
-test_texture : u32
+test_texture :u32
 test_shader : u32
 test_shader_uniforms : map[string]gl.Uniform_Info
 main_camera : camera
@@ -136,7 +132,7 @@ camera_update :: proc"c"(camera : ^camera, delta_time : f32) -> glm.mat4{
 
 
 
-start :: proc"c"(core_interface : ^slate.core_interface){
+start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
     context = runtime.default_context()
     core = core_interface
     world = auto_cast(core.module_get_interface("world"))
@@ -227,8 +223,10 @@ start :: proc"c"(core_interface : ^slate.core_interface){
 
     
     for x :i32= -8; x < 8; x+=1{
-        for z :i32= -8; z < 8; z+=1{
-            chunk_map[{x, 0, z}] = chunk_create({x, 0, z})
+        for y :i32= -8; y < 8; y+=1{
+            for z :i32= -8; z < 8; z+=1{
+                chunk_create({x, y, z})
+            }
         }
     }
 
@@ -278,7 +276,7 @@ start :: proc"c"(core_interface : ^slate.core_interface){
 
 }
 
-input :: proc"c"(core : ^slate.core_interface){ 
+input :: proc"c"(core : ^slate.core_interface, data: rawptr){ 
     event: sdl2.Event
     for ;sdl2.PollEvent(&event);{
         #partial switch(event.type){
@@ -335,7 +333,7 @@ input :: proc"c"(core : ^slate.core_interface){
 }
 
 
-render :: proc"c"(core : ^slate.core_interface){
+render :: proc"c"(core : ^slate.core_interface, data: rawptr){
 
 
     last_frame_time = current_frame_time 

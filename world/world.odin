@@ -14,8 +14,8 @@ import "../slate"
 import "interface"
 
 block_id :: u32
-block_pos :: [3]i32
-chunk_pos :: [3]i32
+block_pos :: distinct [3]i32
+chunk_pos :: distinct [3]i32
 
 CHUNK_SIZE :: 16
 
@@ -38,11 +38,11 @@ get_world :: proc"c"(name  : string) -> ^world{
 }
 
 chunk_to_block :: proc"c"(position : chunk_pos) -> block_pos{
-    return position * CHUNK_SIZE
+    return auto_cast position * CHUNK_SIZE
 }
 
 block_to_chunk :: proc"c"(position : block_pos) -> chunk_pos{
-    return position / CHUNK_SIZE
+    return auto_cast position / CHUNK_SIZE
 }
 
 
@@ -79,12 +79,12 @@ load :: proc"c"(core_interface : ^slate.core_interface) -> slate.version{
         auto_cast set_block
     }
 
-    core.task_add_once("world/generate", "main", generate, nil)
+    core.task_add_once("world/generate", "main", generate, nil, nil)
     core.module_set_interface("world", auto_cast(&world_interface))
     return {0, 0, 1}
 }
 
-generate :: proc"c"(core : ^slate.core_interface){
+generate :: proc"c"(core : ^slate.core_interface, data : rawptr){
     test_world.seed = 1234
     
     for x :i32= -8; x < 8; x+=1{

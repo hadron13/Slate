@@ -47,7 +47,7 @@ module :: struct{
 }
 
 @private
-task_proc :: proc"c"(core: ^core_interface)
+task_proc :: proc"c"(core: ^core_interface, data: rawptr)
 
 @private
 task_status :: enum{
@@ -60,6 +60,7 @@ task :: struct{
     status    : task_status,
     repeatable: bool,
     allocator : mem.Allocator,
+    user_data : rawptr,
     procedure : task_proc, 
     dependencies : []string,
 }
@@ -98,8 +99,8 @@ core_interface :: struct{
     module_reload       : proc"c"(name: string), // hot-reloads module, optionally calling a reload() procedure   
     //TASKS
     task_add_pool       : proc"c"(name: string, threads: u32),
-    task_add_repeated   : proc"c"(name: string, pool: string, task: task_proc,  dependencies: []string),
-    task_add_once       : proc"c"(name: string, pool: string, task: task_proc,  dependencies: []string),
+    task_add_repeated   : proc"c"(name: string, pool: string, task: task_proc, user_data: rawptr,  dependencies: []string),
+    task_add_once       : proc"c"(name: string, pool: string, task: task_proc, user_data: rawptr,  dependencies: []string),
     //MISC 
     on_quit             : proc"c"(callback : proc"c"(status : int)),
     quit                : proc"c"(status: int) 
@@ -282,7 +283,7 @@ task_pool_run :: proc "c"(pool : ^task_pool){
 }
 
 @private
-task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, repeat: bool,  dependencies: []string){
+task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, user_data: rawptr, repeat: bool,  dependencies: []string){
     context = runtime.default_context()
     
     if(task == nil){
@@ -292,30 +293,38 @@ task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, repeat
     tpool := &task_pools[pool]
     
     sync.guard(&tpool.mutex) 
-    tpool.tasks[name] = {name, .WAITING, repeat, context.allocator, task,  slice.clone(dependencies)}
+    tpool.tasks[name] = {
+        name=strings.clone(name),
+        status=.WAITING,
+        repeatable=repeat,
+        allocator=context.allocator,
+        user_data=user_data,
+        procedure=task,
+        dependencies=slice.clone(dependencies)
+    }
+
     topological_sort.add_key(&tpool.task_sorter, name)
-    tpool.is_sorted = false
 
     if(dependencies != nil){
-        for dependency in dependencies{
-            // console_log(.DEBUG, "%p - %s", raw_data(dependency), dependency)
+        tpool.is_sorted = false
+        for dependency in tpool.tasks[name].dependencies{
             if !(dependency in tpool.tasks){
                 console_log(.WARNING, "task '%s' depends on unknown task '%s'", name, dependency)
             }
-            topological_sort.add_dependency(&tpool.task_sorter, name, dependency)
+            topological_sort.add_dependency(&tpool.task_sorter, tpool.tasks[name].name, dependency)
         }
+    }else{
+        append(&tpool.tasks_sorted, tpool.tasks[name].name)
     }
 }
 
 @private
-task_add_repeated :: proc"c"(name: string, pool: string, task: task_proc,  dependencies: []string){
-    // console_log(.DEBUG, "Adding repeated task %s to pool %s", name, pool)
-    task_add_internal(name, pool, task, true, dependencies)
+task_add_repeated :: proc"c"(name: string, pool: string, task: task_proc, user_data: rawptr,  dependencies: []string){
+    task_add_internal(name, pool, task, user_data, true, dependencies)
 }
 @private
-task_add_once:: proc"c"(name: string, pool: string, task: task_proc,  dependencies: []string){
-    // console_log(.DEBUG, "Adding task %s to pool %s", name, pool)
-    task_add_internal(name, pool, task, false, dependencies)
+task_add_once:: proc"c"(name: string, pool: string, task: task_proc, user_data: rawptr,  dependencies: []string){
+    task_add_internal(name, pool, task, user_data, false, dependencies)
 }
 
 @private
@@ -396,7 +405,7 @@ task_execute :: proc(pool: ^task_pool){
     if task_to_run == nil do return
 
     sync.unlock(&pool.mutex) 
-    task_to_run.procedure(&interface)
+    task_to_run.procedure(&interface, task_to_run.user_data)
     sync.lock(&pool.mutex)
 
     task_to_run.status = .DONE
