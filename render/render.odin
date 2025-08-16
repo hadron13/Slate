@@ -111,6 +111,8 @@ test_shader : u32
 test_shader_uniforms : map[string]gl.Uniform_Info
 main_camera : camera
 
+last_frame_time    : u64
+current_frame_time : u64
 
 camera_update :: proc"c"(camera : ^camera, delta_time : f32) -> glm.mat4{
 
@@ -137,15 +139,13 @@ chunk_create :: proc(position : [3]i32) -> chunk{
     chunk : chunk
 
     chunk.offset = position
-    chunk.transform = glm.mat4Translate(linalg.to_f32(position * CHUNK_SIZE))//glm.identity(glm.mat4)
+    chunk.transform = glm.mat4Translate(linalg.to_f32(position * CHUNK_SIZE))
 
     world_chunk := world.get_chunk(world.get_world(""), position)
 
-    start := sdl2.GetPerformanceCounter()
     
     vertices:= chunk_mesh(&(world_chunk.blocks))
 
-    end := sdl2.GetPerformanceCounter()
 
     gl.GenVertexArrays(1, &chunk.vao)
     gl.GenBuffers(1, &chunk.vbo)
@@ -275,6 +275,7 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     }
     core.log(.INFO, "successfully created an OpenGL context")
 
+    
     if(sdl2.GL_SetSwapInterval(-1) == -1){
         sdl2.GL_SetSwapInterval(1)
     }
@@ -434,10 +435,19 @@ input :: proc"c"(core : ^slate.core_interface){
 
         imgui_sdl2.ProcessEvent(&event)
     }
+    last_frame_time = sdl2.GetPerformanceCounter()
 }
+
 
 render :: proc"c"(core : ^slate.core_interface){
 
+
+    last_frame_time = current_frame_time 
+    current_frame_time = sdl2.GetPerformanceCounter()
+    
+    delta_t := f64(current_frame_time - last_frame_time)/f64(sdl2.GetPerformanceFrequency())
+
+    
     imgui_opengl.NewFrame()
     imgui_sdl2.NewFrame()
     imgui.NewFrame()
@@ -447,6 +457,8 @@ render :: proc"c"(core : ^slate.core_interface){
     camera_speed :f32= 1.0
 
     if imgui.Begin("Debug Window") {
+        imgui.Text("FPS: %f", 1/delta_t)
+        imgui.Text("Frame Time: %fms", delta_t*1000.0)
         imgui.SliderFloat("FOV", &main_camera.fov, 5.0, 179.0)
         imgui.SliderFloat("Speed", &camera_speed, 0.1, 10.0)
     }
@@ -463,7 +475,7 @@ render :: proc"c"(core : ^slate.core_interface){
     width, height : c.int
     sdl2.GetWindowSize(window, &width, &height)
     projection := glm.mat4PerspectiveInfinite(main_camera.fov * math.RAD_PER_DEG, f32(width)/f32(height), 0.01)
-    view := camera_update(&main_camera, 1.0 * camera_speed)
+    view := camera_update(&main_camera, f32(delta_t) * camera_speed * 60)
     model := glm.identity(glm.mat4)
     
     gl.UseProgram(test_shader)
