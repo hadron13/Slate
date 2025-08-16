@@ -31,7 +31,7 @@ version :: struct{
 config :: struct{
     key: string,
     value : union{
-        string, i64, f64, b8
+        string, i64, f64, bool 
     }
 }
 
@@ -87,14 +87,14 @@ core_interface :: struct{
     config_get_int      : proc"c"(key : string, default : i64 = 0) -> i64,
     config_get_float    : proc"c"(key : string, default : f64 = 0.0) -> f64,
     config_get_string   : proc"c"(key : string, default : string = "") -> string,
-    config_get_bool     : proc"c"(key : string, default : b8 = false) -> b8,
+    config_get_bool     : proc"c"(key : string, default : bool = false) -> bool,
     //LOGGING   
     log         : proc"c"(category: log_category, format: string, args: ..any, module := MODULE, location := #caller_location),
     c_log       : proc"c"(category: log_category, text: cstring),
     //MODULES
     module_set_interface: proc"c"(name: string, interface: module_interface),  
     module_get_interface: proc"c"(name: string) -> module_interface,      
-    module_get_version  : proc"c"(name: string) -> version,             
+    module_get_version  : proc"c"(name: string) -> version,
     module_reload       : proc"c"(name: string), // hot-reloads module, optionally calling a reload() procedure   
     //TASKS
     task_add_pool       : proc"c"(name: string, threads: u32),
@@ -345,12 +345,9 @@ task_execute :: proc(pool: ^task_pool){
     no_tasks_left := true
     unbroken_done := true
        
-    // console_log(.DEBUG, "pool %s, %i tasks", pool.name, len(pool.tasks))
 
     task_search:
     for name in pool.tasks_sorted[pool.task_index:]{
-        // console_log(.DEBUG, "fetching task %s", name)
-        // console_log(.DEBUG, "status %s", pool.tasks[name].status==.WAITING?"waiting":pool.tasks[name].status==.RUNNING?"running":"done")
         task := &pool.tasks[name]
         if task == nil{
             console_log(.ERROR, "task %s is null", name)
@@ -394,7 +391,6 @@ task_execute :: proc(pool: ^task_pool){
             }
         }
         pool.task_index = 0
-        time.sleep(1 * time.Microsecond)
         return
     }
     if task_to_run == nil do return
@@ -429,7 +425,7 @@ config_get_float    :: proc"c"(key : string, default : f64 = 0.0)   -> f64      
 @private
 config_get_string   :: proc"c"(key : string, default : string = "") -> string   {return (configuration[key] or_else (config){"", default}).value.(string)  or_else default}
 @private
-config_get_bool     :: proc"c"(key : string, default : b8 = false)  -> b8       {return (configuration[key] or_else (config){"", default}).value.(b8)      or_else default}
+config_get_bool     :: proc"c"(key : string, default : bool = false)  -> bool       {return (configuration[key] or_else (config){"", default}).value.(bool)      or_else default}
      
     
 @private
@@ -592,8 +588,8 @@ quit :: proc"c"(status: int){
                 config := configuration[key]
                 switch c in config.value{
                     case i64:    fmt.fprintfln(config_file, "%s=%l", key, c)
-                    case b8:     fmt.fprintfln(config_file, "%s=%b", key, c)
                     case f64:    fmt.fprintfln(config_file, "%s=%f", key, c)
+                    case bool:   fmt.fprintfln(config_file, "%s=%b", key, c)
                     case string: fmt.fprintfln(config_file, "%s=%s", key, c)
                 }
             }

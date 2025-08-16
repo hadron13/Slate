@@ -275,7 +275,7 @@ start :: proc"c"(core_interface : ^slate.core_interface){
     }
     core.log(.INFO, "successfully created an OpenGL context")
 
-    
+
     if(sdl2.GL_SetSwapInterval(-1) == -1){
         sdl2.GL_SetSwapInterval(1)
     }
@@ -461,6 +461,20 @@ render :: proc"c"(core : ^slate.core_interface){
         imgui.Text("Frame Time: %fms", delta_t*1000.0)
         imgui.SliderFloat("FOV", &main_camera.fov, 5.0, 179.0)
         imgui.SliderFloat("Speed", &camera_speed, 0.1, 10.0)
+
+        @static vsync : bool 
+        vsync = core.config_get_bool("render/vsync", true)
+
+        if imgui.Checkbox("V-sync", &vsync){
+            if vsync {
+                if(sdl2.GL_SetSwapInterval(-1) == -1){
+                    sdl2.GL_SetSwapInterval(1)
+                }
+            }else{
+                sdl2.GL_SetSwapInterval(0)
+            }
+            core.config_set({"render/vsync", vsync})
+        }
     }
     imgui.End()
 
