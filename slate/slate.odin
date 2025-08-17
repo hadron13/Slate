@@ -303,10 +303,9 @@ task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, user_d
         dependencies=slice.clone(dependencies)
     }
 
-    topological_sort.add_key(&tpool.task_sorter, name)
-
+    topological_sort.add_key(&tpool.task_sorter, tpool.tasks[name].name)
+    tpool.is_sorted = false
     if(dependencies != nil){
-        tpool.is_sorted = false
         for dependency in tpool.tasks[name].dependencies{
             if !(dependency in tpool.tasks){
                 console_log(.WARNING, "task '%s' depends on unknown task '%s'", name, dependency)
@@ -314,7 +313,7 @@ task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, user_d
             topological_sort.add_dependency(&tpool.task_sorter, tpool.tasks[name].name, dependency)
         }
     }else{
-        append(&tpool.tasks_sorted, tpool.tasks[name].name)
+        // append(&tpool.tasks_sorted, tpool.tasks[name].name)
     }
 }
 
@@ -345,7 +344,21 @@ task_execute :: proc(pool: ^task_pool){
 
     if !pool.is_sorted{
         pool.is_sorted = true 
+
         pool.tasks_sorted, _ = topological_sort.sort(&pool.task_sorter)
+        for key, &relation in pool.task_sorter.relations{
+            for dependent, val in relation.dependents{
+                 dependent_relation := &pool.task_sorter.relations[dependent]
+                 dependent_relation.dependencies += 1
+            }
+            relation.dependencies -= 1
+        }
+        // console_log(.DEBUG, "--- resort ---")
+        // 
+        // console_log(.DEBUG, "index %i", pool.task_index)
+        // for name in pool.tasks_sorted{
+        //     console_log(.DEBUG, "%s \t- %s", name, pool.tasks[name].status==.WAITING?"waiting":pool.tasks[name].status==.RUNNING?"running":"done")
+        // }
     }
     if len(pool.tasks_sorted) == 0 do return
     
@@ -392,7 +405,7 @@ task_execute :: proc(pool: ^task_pool){
                     delete_key(&relations.dependents, key)
                 }
                 delete_key(&pool.task_sorter.relations, name)
-                pool.tasks_sorted, _ = topological_sort.sort(&pool.task_sorter)
+                pool.is_sorted = false
                 continue
             }
             if task.status == .DONE{
@@ -400,6 +413,8 @@ task_execute :: proc(pool: ^task_pool){
             }
         }
         pool.task_index = 0
+
+
         return
     }
     if task_to_run == nil do return
