@@ -4,7 +4,10 @@ package world
 import "core:strings"
 import "core:c"
 import "base:runtime"
+import "core:fmt"
 import "core:math"
+import "core:mem"
+import "core:sync"
 import "core:math/noise"
 
 MODULE :: #config(MOD, "World")
@@ -26,11 +29,13 @@ chunk :: struct{
 
 world :: struct{
     seed   : i64,
+    lock   : sync.Mutex,
     chunks : map[chunk_pos]chunk
 }
 
 
 core : ^slate.core_interface
+world_context : runtime.Context
 test_world : world 
 
 get_world :: proc"c"(name  : string) -> ^world{
@@ -47,10 +52,25 @@ block_to_chunk :: proc"c"(position : block_pos) -> chunk_pos{
 
 
 get_chunk :: proc"c"(world : ^world, position : chunk_pos) -> ^chunk{
+    context = world_context
+    sync.guard(&world.lock)
     chunk, present := &world.chunks[position]
     if present do return chunk
-    
-    return nil
+
+    generated_chunk := chunk_generate(test_world.seed, position)
+
+    test_world.chunks[position] = generated_chunk
+
+   //  string_builder := strings.builder_make()
+   //  fmt.sbprintf(&string_builder, "world/generate_chunk[%i,%i,%i]", position.x, position.y, position.z)
+   // 
+   //  task_pos := new(chunk_pos)
+   //  task_pos^ = position
+   //  task_name := strings.to_string(string_builder)
+   //  
+   //  core.task_add_once(task_name, "main", chunk_generator_task, task_pos, nil)
+
+    return &test_world.chunks[position]
 }
 
 get_block :: proc"c"(world : ^world, position : block_pos) -> block_id{
@@ -69,6 +89,7 @@ world_interface : interface.world_interface
 load :: proc"c"(core_interface : ^slate.core_interface) -> slate.version{
     core = core_interface
     context = runtime.default_context()
+    world_context = context
 
     world_interface = {
         size_of(interface.world_interface),
@@ -94,17 +115,50 @@ generate :: proc"c"(core : ^slate.core_interface, data : rawptr){
     }
 }
 
+chunk_generator_task :: proc"c"(core : ^slate.core_interface, data : rawptr){
+    context = world_context
+    position : chunk_pos = (cast(^chunk_pos)data)^
+    
+    generated_chunk := chunk_generate(test_world.seed, position)
+    sync.lock(&test_world.lock)
+    test_world.chunks[position] = generated_chunk
+    sync.unlock(&test_world.lock)
+
+    mem.free(data)
+}
+
+compound_noise :: proc(seed: i64, octaves: i32, x, y : f64) -> f32{
+    
+    value : f32 = 0 
+    frequency : f32 = 1
+
+    for i :i32= 0; i < octaves;i += 1{
+        frequency *= 2
+        value += noise.noise_2d(seed, {x * f64(frequency) , y * f64(frequency)}) / frequency
+    }
+
+    return value
+}
+
 chunk_generate :: proc"c"(seed : i64, position : chunk_pos) -> chunk{
 
     context = runtime.default_context()
 
+    block_position := chunk_to_block(position)
     chunk : chunk
-    for x := 0; x < CHUNK_SIZE ; x+=1{
-        for z := 0; z < CHUNK_SIZE ; z+=1{
-            height := noise.noise_2d(seed, {f64(x+int(position.x)*CHUNK_SIZE)/16, f64(z+int(position.z)*CHUNK_SIZE)/16})
-            for y := 0; y < CHUNK_SIZE ; y+=1{
-                if(y < int(height * 3) + 4){
-                    chunk.blocks[x][y][z] = (height  > 0.5)?1:2
+    for x :i32= 0; x < CHUNK_SIZE ; x+=1{
+        for z :i32= 0; z < CHUNK_SIZE ; z+=1{
+
+            world_x := x + block_position.x 
+            world_z := z + block_position.z
+            
+            height := compound_noise(seed, 8, f64(world_x)/512, f64(world_z)/512) * 16 
+            height *= 1.0 + height/5
+
+            for y :i32= 0; y < CHUNK_SIZE ; y+=1{ 
+                world_y := y + block_position.y
+                if(world_y < i32(height) + 10){
+                    chunk.blocks[x][y][z] = (height  > 0.1)?1:2
                 } 
             }
         }

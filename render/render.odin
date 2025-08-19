@@ -14,8 +14,7 @@ import gl "vendor:OpenGL"
 import glm "core:math/linalg/glsl"
 import "core:math/linalg"
 import "core:math/noise"
-import stb "vendor:stb/image"
-
+import stb "vendor:stb/image" 
 DISABLE_DOCKING :: #config(DISABLE_DOCKING, false)
 import imgui "imgui"
 import imgui_sdl2 "imgui/imgui_impl_sdl2"
@@ -167,10 +166,14 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
     }
     core.log(.INFO, "successfully created an OpenGL context")
 
-
-    if(sdl2.GL_SetSwapInterval(-1) == -1){
-        sdl2.GL_SetSwapInterval(1)
+    if core.config_get_bool("render/vsync", true){
+        if(sdl2.GL_SetSwapInterval(-1) == -1){
+            sdl2.GL_SetSwapInterval(1)
+        }
+    }else{
+        sdl2.GL_SetSwapInterval(0)
     }
+
 
     gl.load_up_to(3, 3, sdl2.gl_set_proc_address)
 
@@ -222,9 +225,9 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
 
 
     
-    for x :i32= -8; x < 8; x+=1{
-        for y :i32= -8; y < 8; y+=1{
-            for z :i32= -8; z < 8; z+=1{
+    for x :i32= -16; x < 16; x+=1{
+        for y :i32= 0; y < 4; y+=1{
+            for z :i32= -16; z < 16; z+=1{
                 chunk_create({x, y, z})
             }
         }
@@ -334,7 +337,6 @@ input :: proc"c"(core : ^slate.core_interface, data: rawptr){
 
 
 render :: proc"c"(core : ^slate.core_interface, data: rawptr){
-
 
     last_frame_time = current_frame_time 
     current_frame_time = sdl2.GetPerformanceCounter()

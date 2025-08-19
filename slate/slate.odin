@@ -613,7 +613,7 @@ quit :: proc"c"(status: int){
                 switch c in config.value{
                     case i64:    fmt.fprintfln(config_file, "%s=%l", key, c)
                     case f64:    fmt.fprintfln(config_file, "%s=%f", key, c)
-                    case bool:   fmt.fprintfln(config_file, "%s=%b", key, c)
+                    case bool:   fmt.fprintfln(config_file, "%s=%s", key, c?"true":"false")
                     case string: fmt.fprintfln(config_file, "%s=%s", key, c)
                 }
             }

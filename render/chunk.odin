@@ -43,8 +43,8 @@ chunk_create :: proc(position : [3]i32) {
     gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(f32), raw_data(vertices), gl.STATIC_DRAW)
 
     if(quad_ebo == 0){
-        indices  := make([dynamic]u32, 0, 2048)
-        for i :u32= 0; i < 10752; i += 4{
+        indices  := make([dynamic]u32, 0, 98304)
+        for i :u32= 0; i < 98304; i += 4{
             append(&indices, i, i+1, i+2, i+2, i+1, i+3)
         }
         gl.GenBuffers(1, &quad_ebo)
@@ -121,7 +121,7 @@ chunk_render:: proc"c"(chunk : ^chunk){
 
     gl.BindVertexArray(chunk.vao)
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, quad_ebo)
-    gl.DrawElements(gl.TRIANGLES, 10752, gl.UNSIGNED_INT, nil)
+    gl.DrawElements(gl.TRIANGLES, 98304, gl.UNSIGNED_INT, nil)
 
 }
 
