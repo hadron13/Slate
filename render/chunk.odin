@@ -14,11 +14,14 @@ import glm "core:math/linalg/glsl"
 import "core:math/linalg"
 import stb "vendor:stb/image"
 
+import world_interface "../world/interface"
+
 chunk_map : map[[3]i32]chunk
 quad_ebo : u32
 
 chunk_create :: proc(position : [3]i32) { 
-    world_chunk := world.get_chunk(world.get_world(""), position)
+    current_world := world.get_world("")
+    world_chunk := world.get_chunk(current_world, position)
     if world_chunk == nil{
         return
     }
@@ -31,7 +34,45 @@ chunk_create :: proc(position : [3]i32) {
     chunk.transform = glm.mat4Translate(linalg.to_f32(position * CHUNK_SIZE))
 
  
-    vertices:= chunk_mesh(&(world_chunk.blocks))
+
+
+
+    vertices := make([dynamic]f32, 0, 2048 * 3)
+    blocks := &world_chunk.blocks
+
+    for x := 0; x < CHUNK_SIZE ; x+=1{
+        for y := 0; y < CHUNK_SIZE ; y+=1{
+            for z := 0; z < CHUNK_SIZE ; z+=1{ 
+                if blocks[x][y][z] == 0 do continue 
+
+                tex_id := cast(f32)blocks[x][y][z] -1
+
+                if (x == 0) || blocks[x-1][y][z] == 0{
+                                          //  X       Y       Z     U  V    ID 
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id}, {0, 1, 0, 0, 1, tex_id}, {0, 0, 1, 1, 0, tex_id}, {0, 1, 1, 1, 1, tex_id})
+                }
+                if y == 0 || blocks[x][y-1][z] == 0{
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id}, {0, 0, 1, 0, 1, tex_id}, {1, 0, 0, 1, 0, tex_id}, {1, 0, 1, 1, 1, tex_id})
+                }
+                if z == 0 || blocks[x][y][z-1] == 0{
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 1, 0, tex_id}, {1, 0, 0, 0, 0, tex_id}, {0, 1, 0, 1, 1, tex_id}, {1, 1, 0, 0, 1, tex_id})
+                }
+
+                if x == CHUNK_SIZE-1 || blocks[x+1][y][z] == 0{
+                    append_quad(&vertices, {f32(x)+1, f32(y), f32(z), 1, 0, tex_id}, {0, 0, 1, 0, 0, tex_id}, {0, 1, 0, 1, 1, tex_id}, {0, 1, 1, 0, 1, tex_id})
+                }
+                if y == CHUNK_SIZE-1 || blocks[x][y+1][z] == 0{
+                    append_quad(&vertices, {f32(x), f32(y)+1, f32(z), 0, 0, tex_id}, {1, 0, 0, 0, 1, tex_id}, {0, 0, 1, 1, 0, tex_id}, {1, 0, 1, 1, 1, tex_id})
+                }
+                if z == CHUNK_SIZE-1 || blocks[x][y][z+1] == 0{
+                    append_quad(&vertices, {f32(x), f32(y), f32(z)+1, 0, 0, tex_id}, {0, 1, 0, 0, 1, tex_id}, {1, 0, 0, 1, 0, tex_id}, {1, 1, 0, 1, 1, tex_id})
+                }
+            }
+        }
+    }
+
+
+
 
 
     gl.GenVertexArrays(1, &chunk.vao)
@@ -76,43 +117,6 @@ append_quad :: #force_inline proc(vertices : ^[dynamic]f32, a, b, c, d : [6]f32)
 }
 
 CHUNK_SIZE :: 16
-
-chunk_mesh :: proc(blocks: ^[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE]u32) -> []f32{
-    vertices := make([dynamic]f32, 0, 2048 * 3)
-
-    for x := 0; x < CHUNK_SIZE ; x+=1{
-        for y := 0; y < CHUNK_SIZE ; y+=1{
-            for z := 0; z < CHUNK_SIZE ; z+=1{ 
-                if blocks[x][y][z] == 0 do continue 
-
-                tex_id := cast(f32)blocks[x][y][z] -1
-
-                if x == 0 || blocks[x-1][y][z] == 0{
-                                          //  X       Y       Z     U  V 
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id}, {0, 1, 0, 0, 1, tex_id}, {0, 0, 1, 1, 0, tex_id}, {0, 1, 1, 1, 1, tex_id})
-                }
-                if y == 0 || blocks[x][y-1][z] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id}, {0, 0, 1, 0, 1, tex_id}, {1, 0, 0, 1, 0, tex_id}, {1, 0, 1, 1, 1, tex_id})
-                }
-                if z == 0 || blocks[x][y][z-1] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 1, 0, tex_id}, {1, 0, 0, 0, 0, tex_id}, {0, 1, 0, 1, 1, tex_id}, {1, 1, 0, 0, 1, tex_id})
-                }
-
-                if x == CHUNK_SIZE-1 || blocks[x+1][y][z] == 0{
-                    append_quad(&vertices, {f32(x)+1, f32(y), f32(z), 1, 0, tex_id}, {0, 0, 1, 0, 0, tex_id}, {0, 1, 0, 1, 1, tex_id}, {0, 1, 1, 0, 1, tex_id})
-                }
-                if y == CHUNK_SIZE-1 || blocks[x][y+1][z] == 0{
-                    append_quad(&vertices, {f32(x), f32(y)+1, f32(z), 0, 0, tex_id}, {1, 0, 0, 0, 1, tex_id}, {0, 0, 1, 1, 0, tex_id}, {1, 0, 1, 1, 1, tex_id})
-                }
-                if z == CHUNK_SIZE-1 || blocks[x][y][z+1] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z)+1, 0, 0, tex_id}, {0, 1, 0, 0, 1, tex_id}, {1, 0, 0, 1, 0, tex_id}, {1, 1, 0, 1, 1, tex_id})
-                }
-            }
-        }
-    }
-    
-    return vertices[:]
-}
 
 chunk_render:: proc"c"(chunk : ^chunk){
     // core.log(.DEBUG, "VAO: %i, %i, %i, %i", chunk.vao, chunk.offset.x, chunk.offset.y, chunk.offset.z)

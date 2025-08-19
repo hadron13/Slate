@@ -64,7 +64,7 @@ scene :: struct{
     //lights
     camera    : camera
 }
-
+  
 // RENDER API
 render_interface :: struct{ 
     size : u64,
@@ -224,7 +224,7 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
 
 
 
-    
+     
     for x :i32= -16; x < 16; x+=1{
         for y :i32= 0; y < 4; y+=1{
             for z :i32= -16; z < 16; z+=1{
