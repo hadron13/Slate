@@ -51,6 +51,25 @@ chunk_create :: proc(position : [3]i32) {
     vertices := make([dynamic]f32, 0, 2048 * 3)
     blocks := &world_chunk.blocks
 
+    ao_map : [CHUNK_SIZE + 1][CHUNK_SIZE + 1][CHUNK_SIZE + 1] f32
+
+    for x := 0; x < CHUNK_SIZE ; x+=1{
+        for y := 0; y < CHUNK_SIZE ; y+=1{
+            for z := 0; z < CHUNK_SIZE ; z+=1{
+                if blocks[x][y][z] == 0 do continue 
+                
+                ao_map[x]  [y]  [z]   += 0.1
+                ao_map[x]  [y]  [z+1] += 0.1
+                ao_map[x]  [y+1][z]   += 0.1
+                ao_map[x]  [y+1][z+1] += 0.1
+                ao_map[x+1][y]  [z]   += 0.1
+                ao_map[x+1][y]  [z+1] += 0.1
+                ao_map[x+1][y+1][z]   += 0.1
+                ao_map[x+1][y+1][z+1] += 0.1
+            }
+        }
+    }
+
     for x := 0; x < CHUNK_SIZE ; x+=1{
         for y := 0; y < CHUNK_SIZE ; y+=1{
             for z := 0; z < CHUNK_SIZE ; z+=1{ 
@@ -60,23 +79,23 @@ chunk_create :: proc(position : [3]i32) {
 
                 if (x == 0) || blocks[x-1][y][z] == 0{
                                           //  X       Y       Z     U  V    ID 
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id, 0}, {0, 1, 0, 0, 1, tex_id, 0}, {0, 0, 1, 1, 0, tex_id, 0}, {0, 1, 1, 1, 1, tex_id, 0})
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id, ao_map[x][y][z]}, {0, 1, 0, 0, 1, tex_id, ao_map[x][y+1][z]}, {0, 0, 1, 1, 0, tex_id, ao_map[x][y][z+1]}, {0, 1, 1, 1, 1, tex_id, ao_map[x][y+1][z+1]})
                 }
                 if y == 0 || blocks[x][y-1][z] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id, 0}, {0, 0, 1, 0, 1, tex_id, 0}, {1, 0, 0, 1, 0, tex_id, 0}, {1, 0, 1, 1, 1, tex_id, 0})
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id, ao_map[x][y][z]}, {0, 0, 1, 0, 1, tex_id, ao_map[x][y][z+1]}, {1, 0, 0, 1, 0, tex_id, ao_map[x+1][y][z]}, {1, 0, 1, 1, 1, tex_id, ao_map[x+1][y][z+1]})
                 }
                 if z == 0 || blocks[x][y][z-1] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 1, 0, tex_id, 0}, {1, 0, 0, 0, 0, tex_id, 0}, {0, 1, 0, 1, 1, tex_id, 0}, {1, 1, 0, 0, 1, tex_id, 0})
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 1, 0, tex_id, ao_map[x][y][z]}, {1, 0, 0, 0, 0, tex_id, ao_map[x+1][y][z]}, {0, 1, 0, 1, 1, tex_id, ao_map[x][y+1][z]}, {1, 1, 0, 0, 1, tex_id, ao_map[x+1][y+1][z]})
                 }
 
                 if x == CHUNK_SIZE-1 || blocks[x+1][y][z] == 0{
-                    append_quad(&vertices, {f32(x)+1, f32(y), f32(z), 1, 0, tex_id, 0}, {0, 0, 1, 0, 0, tex_id, 0}, {0, 1, 0, 1, 1, tex_id, 0}, {0, 1, 1, 0, 1, tex_id, 0})
+                    append_quad(&vertices, {f32(x)+1, f32(y), f32(z), 1, 0, tex_id, ao_map[x+1][y][z]}, {0, 0, 1, 0, 0, tex_id, ao_map[x+1][y][z+1]}, {0, 1, 0, 1, 1, tex_id, ao_map[x][y+1][z]}, {0, 1, 1, 0, 1, tex_id, ao_map[x+1][y+1][z+1]})
                 }
                 if y == CHUNK_SIZE-1 || blocks[x][y+1][z] == 0{
-                    append_quad(&vertices, {f32(x), f32(y)+1, f32(z), 0, 0, tex_id, 0}, {1, 0, 0, 0, 1, tex_id, 0}, {0, 0, 1, 1, 0, tex_id, 0}, {1, 0, 1, 1, 1, tex_id, 0})
+                    append_quad(&vertices, {f32(x), f32(y)+1, f32(z), 0, 0, tex_id, ao_map[x][y+1][z]}, {1, 0, 0, 0, 1, tex_id, ao_map[x+1][y+1][z]}, {0, 0, 1, 1, 0, tex_id, ao_map[x][y+1][z+1]}, {1, 0, 1, 1, 1, tex_id, ao_map[x+1][y+1][z+1]})
                 }
                 if z == CHUNK_SIZE-1 || blocks[x][y][z+1] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z)+1, 0, 0, tex_id, 0}, {0, 1, 0, 0, 1, tex_id, 0}, {1, 0, 0, 1, 0, tex_id, 0}, {1, 1, 0, 1, 1, tex_id, 0})
+                    append_quad(&vertices, {f32(x), f32(y), f32(z)+1, 0, 0, tex_id, ao_map[x][y][z+1]}, {0, 1, 0, 0, 1, tex_id, ao_map[x][y+1][z+1]}, {1, 0, 0, 1, 0, tex_id, ao_map[x+1][y][z+1]}, {1, 1, 0, 1, 1, tex_id, ao_map[x+1][y+1][z+1]})
                 }
             }
         }
