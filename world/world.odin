@@ -38,7 +38,7 @@ core : ^slate.core_interface
 world_context : runtime.Context
 test_world : world 
 
-get_world :: proc"c"(name  : string) -> ^world{
+world_get :: proc"c"(name  : string) -> ^world{
     return &test_world
 }
 
@@ -51,7 +51,7 @@ block_to_chunk :: proc"c"(position : block_pos) -> chunk_pos{
 }
 
 
-get_chunk :: proc"c"(world : ^world, position : chunk_pos) -> ^chunk{
+chunk_get :: proc"c"(world : ^world, position : chunk_pos) -> ^chunk{
     context = world_context
     sync.guard(&world.lock)
     chunk, present := &world.chunks[position]
@@ -73,13 +73,13 @@ get_chunk :: proc"c"(world : ^world, position : chunk_pos) -> ^chunk{
     return &test_world.chunks[position]
 }
 
-get_block :: proc"c"(world : ^world, position : block_pos) -> block_id{
-    chunk := get_chunk(world, block_to_chunk(position))
+block_get :: proc"c"(world : ^world, position : block_pos) -> block_id{
+    chunk := chunk_get(world, block_to_chunk(position))
     return chunk.blocks[position.x][position.y][position.z]
 }
 
-set_block :: proc"c"(world : ^world, position : block_pos, id: block_id){
-    chunk := get_chunk(world, block_to_chunk(position))
+block_set :: proc"c"(world : ^world, position : block_pos, id: block_id){
+    chunk := chunk_get(world, block_to_chunk(position))
     chunk.blocks[position.x][position.y][position.z] = id
 }
 
@@ -94,10 +94,12 @@ load :: proc"c"(core_interface : ^slate.core_interface) -> slate.version{
     world_interface = {
         size_of(interface.world_interface),
         {0, 0, 1},
-        auto_cast get_world,
-        auto_cast get_chunk,
-        auto_cast get_block,
-        auto_cast set_block
+        auto_cast world_get,
+        nil,
+        nil,
+        auto_cast chunk_get,
+        auto_cast block_get,
+        auto_cast block_set 
     }
 
     core.task_add_once("world/generate", "main", generate, nil, nil)

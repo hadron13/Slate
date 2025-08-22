@@ -27,8 +27,19 @@ world :: struct{
 world_interface :: struct{
     size : u64,
     version : version,
-    get_world : proc"c"(name  : string) -> ^world,
-    get_chunk : proc"c"(world : ^world, position : chunk_pos) -> ^chunk,
-    get_block : proc"c"(world : ^world, position : block_pos) -> block_id,
-    set_block : proc"c"(world : ^world, position : block_pos, id: block_id),
+    world_get : proc"c"(name  : string) -> ^world,
+    chunk_load: proc"c"(world : ^world, position : chunk_pos, callback : proc"c"(world : ^world, position : chunk_pos)),
+    chunk_unload: proc"c"(world : ^world, position : chunk_pos),
+    chunk_get : proc"c"(world : ^world, position : chunk_pos) -> ^chunk,
+    block_set : proc"c"(world : ^world, position : block_pos) -> block_id,
+    block_get : proc"c"(world : ^world, position : block_pos, id: block_id),
+    
+}
+
+chunk_to_block :: proc"c"(position : chunk_pos) -> block_pos{
+    return auto_cast position * CHUNK_SIZE
+}
+
+block_to_chunk :: proc"c"(position : block_pos) -> chunk_pos{
+    return auto_cast position / CHUNK_SIZE
 }

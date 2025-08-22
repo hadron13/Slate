@@ -225,16 +225,14 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
 
 
      
-    for x :i32= -16; x < 16; x+=1{
+    for x :i32= -32; x < 32; x+=1{
         for y :i32= 0; y < 4; y+=1{
-            for z :i32= -16; z < 16; z+=1{
-                chunk_create({x, y, z})
+            for z :i32= -32; z < 32; z+=1{
+                chunk_mesh({x, y, z})
             }
         }
     }
 
-       // gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * size_of(f32), 5 * size_of(f32))
-    // gl.EnableVertexAttribArray(2)
 
 
     gl.BindBuffer(gl.ARRAY_BUFFER, 0);
@@ -352,7 +350,7 @@ testAabb :: proc"contextless"(MPV: glm.mat4, min, max: glm.vec3) -> bool{
 		pzX * (pzX < 0 ? min[0] : max[0]) + pzY * (pzY < 0 ? min[1] : max[1]) + pzZ * (pzZ < 0 ? min[2] : max[2]) >= -pzW;
 }
 
-
+ 
 render :: proc"c"(core : ^slate.core_interface, data: rawptr){
 
     last_frame_time = current_frame_time 
@@ -412,6 +410,8 @@ render :: proc"c"(core : ^slate.core_interface, data: rawptr){
    
     proj_view := projection * view
     for key, &chunk in chunk_map{
+        // if(world_interface.chunk_to_block(key))
+
         minC := 16 * glm.vec3{f32(key.x), f32(key.y), f32(key.z)}
 		maxC := minC + glm.vec3{16, 16, 16}
 
