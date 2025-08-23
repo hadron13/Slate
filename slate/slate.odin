@@ -15,6 +15,7 @@ import "core:strconv"
 import "core:sys/windows"
 import "core:thread"
 import "core:time"
+import "core:sys/posix"
 
 import "base:runtime"
 
@@ -126,7 +127,9 @@ core_context  : runtime.Context
 @private
 main :: proc() {
     log_level = .DEBUG
-    
+    posix.signal(.SIGINT, proc"c"(sig : posix.Signal){
+        quit(-1)
+    })
 
     when ODIN_DEBUG{
         track: mem.Tracking_Allocator
@@ -341,28 +344,26 @@ task_runner_thread :: proc(pool_ptr : rawptr){
 @private
 task_execute :: proc(pool: ^task_pool){ 
     sync.guard(&pool.mutex)
-
+    
     if !pool.is_sorted{
         pool.is_sorted = true 
-
         pool.tasks_sorted, _ = topological_sort.sort(&pool.task_sorter)
+
         for key, &relation in pool.task_sorter.relations{
             for dependent, val in relation.dependents{
-                 dependent_relation := &pool.task_sorter.relations[dependent]
-                 dependent_relation.dependencies += 1
+                dependent_relation := &pool.task_sorter.relations[dependent]
+                dependent_relation.dependencies += 1
             }
-            relation.dependencies -= 1
         }
-        // console_log(.DEBUG, "--- resort ---")
-        // 
         // console_log(.DEBUG, "index %i", pool.task_index)
         // for name in pool.tasks_sorted{
         //     console_log(.DEBUG, "%s \t- %s", name, pool.tasks[name].status==.WAITING?"waiting":pool.tasks[name].status==.RUNNING?"running":"done")
         // }
+        // console_log(.DEBUG, "-----------------")
     }
     if len(pool.tasks_sorted) == 0 do return
     
-    task_to_run : ^task = nil
+    task_to_run : string = ""
 
     no_tasks_left := true
     unbroken_done := true
@@ -387,11 +388,11 @@ task_execute :: proc(pool: ^task_pool){
             if pool.tasks[dep].status != .DONE do continue task_search
         } 
         task.status = .RUNNING
-        task_to_run = task
+        task_to_run = name
         break
     }
     // console_log(.DEBUG, "------------")
-    // console_log(.DEBUG, "index %i", pool.task_index)
+    // console_log(.DEBUG, "pool %s - index %i", pool.name, pool.task_index)
     // for name in pool.tasks_sorted{
     //     console_log(.DEBUG, "%s \t- %s", name, pool.tasks[name].status==.WAITING?"waiting":pool.tasks[name].status==.RUNNING?"running":"done")
     // }
@@ -399,31 +400,32 @@ task_execute :: proc(pool: ^task_pool){
     if no_tasks_left{
         for name in pool.tasks_sorted{
             task := &pool.tasks[name]
-            if !task.repeatable{
-                relations := &pool.task_sorter.relations[name]
-                for key, _ in relations.dependents{
-                    delete_key(&relations.dependents, key)
-                }
-                delete_key(&pool.task_sorter.relations, name)
-                pool.is_sorted = false
-                continue
-            }
-            if task.status == .DONE{
+
+            if task.status != .DONE do continue
+
+            if task.repeatable{
                 task.status = .WAITING
+                continue
+            }    
+            console_log(.DEBUG, "deleting task %s", name)
+            relations := &pool.task_sorter.relations[name]
+            for key, _ in relations.dependents{
+                (&pool.task_sorter.relations[key]).dependencies -= 1
             }
+            delete_key(&pool.task_sorter.relations, name)
+            pool.is_sorted = false
+            continue
         }
         pool.task_index = 0
-
-
         return
     }
-    if task_to_run == nil do return
+    if task_to_run == "" do return
 
     sync.unlock(&pool.mutex) 
-    task_to_run.procedure(&interface, task_to_run.user_data)
+    pool.tasks[task_to_run].procedure(&interface, pool.tasks[task_to_run].user_data)
     sync.lock(&pool.mutex)
 
-    task_to_run.status = .DONE
+    (&pool.tasks[task_to_run]).status = .DONE
 }
 
 
@@ -487,7 +489,9 @@ config_parse :: proc(text : string) {
     config_set({key, value_string})
 } 
 
+@private
 log_mutex : sync.Mutex
+@private
 log_file  : os.Handle
 
 @private
@@ -613,7 +617,7 @@ quit :: proc"c"(status: int){
                 switch c in config.value{
                     case i64:    fmt.fprintfln(config_file, "%s=%l", key, c)
                     case f64:    fmt.fprintfln(config_file, "%s=%f", key, c)
-                    case bool:   fmt.fprintfln(config_file, "%s=%s", key, c?"true":"false")
+                    case bool:   fmt.fprintfln(config_file, "%s=%s", key, c?"true":"")
                     case string: fmt.fprintfln(config_file, "%s=%s", key, c)
                 }
             }
