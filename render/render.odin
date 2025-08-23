@@ -7,6 +7,7 @@ import "base:runtime"
 import "core:math"
 
 import "core:os"
+import "core:fmt"
 import "core:time"
 import "vendor:sdl2"
 import "vendor:sdl2/image"
@@ -100,6 +101,7 @@ window : ^sdl2.Window
 gl_context : sdl2.GLContext
 core  : ^slate.core_interface
 world : ^world_interface.world_interface
+render_context : runtime.Context
 
 test_texture :u32
 test_shader : u32
@@ -133,6 +135,8 @@ camera_update :: proc"c"(camera : ^camera, delta_time : f32) -> glm.mat4{
 
 start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
     context = runtime.default_context()
+    render_context = context
+
     core = core_interface
     world = auto_cast(core.module_get_interface("world"))
     if world == nil{
@@ -176,6 +180,7 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
 
 
     gl.load_up_to(3, 3, sdl2.gl_set_proc_address)
+
 
     core.log(.INFO, "loaded OpenGL version %s", gl.GetString(gl.VERSION))
     core.log(.INFO, "vendor: %s", gl.GetString(gl.VENDOR) )
@@ -223,18 +228,6 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
     test_shader_uniforms = gl.get_uniforms_from_program(test_shader)
 
 
-
-     
-    for x :i32= -32; x < 32; x+=1{
-        for y :i32= 0; y < 4; y+=1{
-            for z :i32= -32; z < 32; z+=1{
-                chunk_mesh({x, y, z})
-            }
-        }
-    }
-
-
-
     gl.BindBuffer(gl.ARRAY_BUFFER, 0);
     gl.BindVertexArray(0)
 
@@ -275,9 +268,34 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
     sdl2.SetRelativeMouseMode(true)
     main_camera = {{0, 8, 0}, {0, 0, 0}, -90, 0, 90}
 
+
+
+    test_world := world.world_get("")
+    
+    for x :i32= 0; x < 2; x+=1{
+        for y :i32= 0; y < 2; y+=1{
+            for z :i32= 0; z < 2; z+=1{
+                world.chunk_load(test_world, {x, y, z}, 
+                    proc"c"(current_world : ^world_interface.world, position : [3]i32) { 
+                        context = render_context
+                        task_data := new(struct{world: ^world_interface.world, pos: [3]i32})
+                        task_data.world = current_world
+                        task_data.pos = position
+                        
+                        chunk_mesh(current_world, position) 
+                        // core.log(.DEBUG, "meshing chunk [%i, %i, %i]", position.x, position.y, position.z)  
+                        // core.task_add_once(fmt.aprintf("render/mesh_chunk[%i,%i,%i]", position.x, position.y, position.z),
+                                // "render", chunk_mesh_task, task_data, nil)
+                        // 
+                    }
+                )
+            }
+        }
+    }
 }
 
 input :: proc"c"(core : ^slate.core_interface, data: rawptr){ 
+    core.log(.DEBUG, "idoso")
     event: sdl2.Event
     for ;sdl2.PollEvent(&event);{
         #partial switch(event.type){

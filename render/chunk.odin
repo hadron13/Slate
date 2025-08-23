@@ -15,6 +15,7 @@ import "core:math/linalg"
 import stb "vendor:stb/image"
 
 import world_interface "../world/interface"
+import "../slate"
 
 chunk_map : map[[3]i32]chunk
 quad_ebo : u32
@@ -30,8 +31,19 @@ append_quad :: #force_inline proc(vertices : ^[dynamic]f32, a, b, c, d : [7]f32)
     // append(indices, last_vert, last_vert+1, last_vert+2, last_vert+2, last_vert+1, last_vert+3)
 }
 
-chunk_mesh :: proc(position : [3]i32) { 
-    current_world := world.world_get("")
+chunk_mesh_task :: proc"c"(core : ^slate.core_interface, data : rawptr){ 
+    context = render_context
+    task_data := cast(^struct{world : ^world_interface.world, pos: [3]i32}) data
+    
+    core.log(.DEBUG, "generating chunk [%i, %i, %i]", task_data.pos.x, task_data.pos.y, task_data.pos.z)  
+
+    chunk_mesh(task_data.world, task_data.pos)
+    
+    free(task_data)
+}
+
+chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32) { 
+    context = runtime.default_context()
     world_chunk := world.chunk_get(current_world, position)
     if world_chunk == nil{
         return

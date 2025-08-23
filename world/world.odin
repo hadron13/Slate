@@ -51,6 +51,43 @@ block_to_chunk :: proc"c"(position : block_pos) -> chunk_pos{
 }
 
 
+
+chunk_load :: proc"c"(world : ^world, position : chunk_pos, callback : proc"c"(^world, chunk_pos)){ 
+    context = world_context
+    
+    string_builder := strings.builder_make()
+            
+    task_data := new(struct{pos: chunk_pos, callback : proc"c"(^world, chunk_pos)})
+    task_data.pos = position
+    task_data.callback = callback 
+    
+    // core.task_add_once(fmt.aprintf("world/generate_chunk[%i,%i,%i]", position.x, position.y, position.z),
+            // "main", chunk_generator_task, task_data, nil)
+     
+    generated_chunk := chunk_generate(test_world.seed, position)
+    sync.lock(&test_world.lock)
+    test_world.chunks[position] = generated_chunk
+    sync.unlock(&test_world.lock)
+    
+    callback(world, position)
+}
+
+chunk_generator_task :: proc"c"(core : ^slate.core_interface, data : rawptr){
+    context = world_context
+
+    task_data := cast(^struct{pos: chunk_pos, callback : proc"c"(^world, chunk_pos)}) data
+    core.log(.DEBUG, "generating chunk [%i, %i, %i]", task_data.pos.x, task_data.pos.y, task_data.pos.z)  
+
+    generated_chunk := chunk_generate(test_world.seed, task_data.pos)
+    sync.lock(&test_world.lock)
+    test_world.chunks[task_data.pos] = generated_chunk
+    sync.unlock(&test_world.lock)
+
+    task_data.callback(&test_world, task_data.pos)
+
+    free(data)
+}
+
 chunk_get :: proc"c"(world : ^world, position : chunk_pos) -> ^chunk{
     context = world_context
     sync.guard(&world.lock)
@@ -61,14 +98,7 @@ chunk_get :: proc"c"(world : ^world, position : chunk_pos) -> ^chunk{
 
     test_world.chunks[position] = generated_chunk
 
-   //  string_builder := strings.builder_make()
-   //  fmt.sbprintf(&string_builder, "world/generate_chunk[%i,%i,%i]", position.x, position.y, position.z)
-   // 
-   //  task_pos := new(chunk_pos)
-   //  task_pos^ = position
-   //  task_name := strings.to_string(string_builder)
-   //  
-   //  core.task_add_once(task_name, "main", chunk_generator_task, task_pos, nil)
+
 
     return &test_world.chunks[position]
 }
@@ -95,7 +125,7 @@ load :: proc"c"(core_interface : ^slate.core_interface) -> slate.version{
         size_of(interface.world_interface),
         {0, 0, 1},
         auto_cast world_get,
-        nil,
+        auto_cast chunk_load,
         nil,
         auto_cast chunk_get,
         auto_cast block_get,
@@ -117,17 +147,7 @@ generate :: proc"c"(core : ^slate.core_interface, data : rawptr){
     }
 }
 
-chunk_generator_task :: proc"c"(core : ^slate.core_interface, data : rawptr){
-    context = world_context
-    position : chunk_pos = (cast(^chunk_pos)data)^
-    
-    generated_chunk := chunk_generate(test_world.seed, position)
-    sync.lock(&test_world.lock)
-    test_world.chunks[position] = generated_chunk
-    sync.unlock(&test_world.lock)
 
-    mem.free(data)
-}
 
 compound_noise :: proc(seed: i64, octaves: i32, x, y : f64) -> f32{
     
@@ -155,7 +175,7 @@ chunk_generate :: proc"c"(seed : i64, position : chunk_pos) -> chunk{
             world_z := z + block_position.z
             
             height := compound_noise(seed, 8, f64(world_x)/512, f64(world_z)/512) * 16 
-            height *= 1.0 + height/5
+            height *= 1.0 + height
 
             for y :i32= 0; y < CHUNK_SIZE ; y+=1{ 
                 world_y := y + block_position.y
