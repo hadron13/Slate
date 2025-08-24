@@ -20,7 +20,7 @@ block_id :: u32
 block_pos :: distinct [3]i32
 chunk_pos :: distinct [3]i32
 
-CHUNK_SIZE :: 16
+CHUNK_SIZE :: interface.CHUNK_SIZE
 
 chunk :: struct{
     position : chunk_pos,
@@ -30,7 +30,7 @@ chunk :: struct{
 world :: struct{
     seed   : i64,
     lock   : sync.Mutex,
-    chunks : map[chunk_pos]chunk
+    chunks : map[chunk_pos]^chunk
 }
 
 
@@ -45,7 +45,7 @@ world_get :: proc"c"(name  : string) -> ^world{
 chunk_to_block :: proc"c"(position : chunk_pos) -> block_pos{
     return auto_cast position * CHUNK_SIZE
 }
-
+ 
 block_to_chunk :: proc"c"(position : block_pos) -> chunk_pos{
     return auto_cast position / CHUNK_SIZE
 }
@@ -61,22 +61,22 @@ chunk_load :: proc"c"(world : ^world, position : chunk_pos, callback : proc"c"(^
     task_data.pos = position
     task_data.callback = callback 
     
-    // core.task_add_once(fmt.aprintf("world/generate_chunk[%i,%i,%i]", position.x, position.y, position.z),
-            // "main", chunk_generator_task, task_data, nil)
+    core.task_add_once(fmt.aprintf("world/generate_chunk[%i,%i,%i]", position.x, position.y, position.z),
+            "main", chunk_generator_task, task_data, nil)
      
-    generated_chunk := chunk_generate(test_world.seed, position)
-    sync.lock(&test_world.lock)
-    test_world.chunks[position] = generated_chunk
-    sync.unlock(&test_world.lock)
+    // generated_chunk := chunk_generate(test_world.seed, position)
+    // sync.lock(&test_world.lock)
+    // test_world.chunks[position] = generated_chunk
+    // sync.unlock(&test_world.lock)
     
-    callback(world, position)
+    // callback(world, position)
 }
 
 chunk_generator_task :: proc"c"(core : ^slate.core_interface, data : rawptr){
     context = world_context
 
     task_data := cast(^struct{pos: chunk_pos, callback : proc"c"(^world, chunk_pos)}) data
-    core.log(.DEBUG, "generating chunk [%i, %i, %i]", task_data.pos.x, task_data.pos.y, task_data.pos.z)  
+    // core.log(.DEBUG, "generating chunk [%i, %i, %i]", task_data.pos.x, task_data.pos.y, task_data.pos.z)  
 
     generated_chunk := chunk_generate(test_world.seed, task_data.pos)
     sync.lock(&test_world.lock)
@@ -91,16 +91,9 @@ chunk_generator_task :: proc"c"(core : ^slate.core_interface, data : rawptr){
 chunk_get :: proc"c"(world : ^world, position : chunk_pos) -> ^chunk{
     context = world_context
     sync.guard(&world.lock)
-    chunk, present := &world.chunks[position]
-    if present do return chunk
+    chunk, present := world.chunks[position]
 
-    generated_chunk := chunk_generate(test_world.seed, position)
-
-    test_world.chunks[position] = generated_chunk
-
-
-
-    return &test_world.chunks[position]
+    return present? chunk : nil
 }
 
 block_get :: proc"c"(world : ^world, position : block_pos) -> block_id{
@@ -162,12 +155,12 @@ compound_noise :: proc(seed: i64, octaves: i32, x, y : f64) -> f32{
     return value
 }
 
-chunk_generate :: proc"c"(seed : i64, position : chunk_pos) -> chunk{
+chunk_generate :: proc"c"(seed : i64, position : chunk_pos) -> ^chunk{
 
     context = runtime.default_context()
 
     block_position := chunk_to_block(position)
-    chunk : chunk
+    chunk := new(chunk)
     for x :i32= 0; x < CHUNK_SIZE ; x+=1{
         for z :i32= 0; z < CHUNK_SIZE ; z+=1{
 

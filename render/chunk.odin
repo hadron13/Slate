@@ -17,8 +17,17 @@ import stb "vendor:stb/image"
 import world_interface "../world/interface"
 import "../slate"
 
+chunk:: struct{
+    vao, vbo  : u32,
+    offset    : [3]i32,
+    transform : glm.mat4,    
+}
+
 chunk_map : map[[3]i32]chunk
 quad_ebo : u32
+
+
+CHUNK_SIZE :: world_interface.CHUNK_SIZE
 
 //vertex format: XYZ - UV - ID - AO
 append_quad :: #force_inline proc(vertices : ^[dynamic]f32, a, b, c, d : [7]f32){
@@ -35,7 +44,7 @@ chunk_mesh_task :: proc"c"(core : ^slate.core_interface, data : rawptr){
     context = render_context
     task_data := cast(^struct{world : ^world_interface.world, pos: [3]i32}) data
     
-    core.log(.DEBUG, "generating chunk [%i, %i, %i]", task_data.pos.x, task_data.pos.y, task_data.pos.z)  
+    // core.log(.DEBUG, "generating chunk [%i, %i, %i]", task_data.pos.x, task_data.pos.y, task_data.pos.z)  
 
     chunk_mesh(task_data.world, task_data.pos)
     
@@ -43,7 +52,7 @@ chunk_mesh_task :: proc"c"(core : ^slate.core_interface, data : rawptr){
 }
 
 chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32) { 
-    context = runtime.default_context()
+    context = render_context
     world_chunk := world.chunk_get(current_world, position)
     if world_chunk == nil{
         return
@@ -55,10 +64,6 @@ chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32)
 
     chunk.offset = position
     chunk.transform = glm.mat4Translate(linalg.to_f32(position * CHUNK_SIZE))
-
- 
-
-
 
     vertices := make([dynamic]f32, 0, 2048 * 3)
     blocks := &world_chunk.blocks
@@ -143,15 +148,20 @@ chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32)
 
     gl.BindBuffer(gl.ARRAY_BUFFER, chunk.vbo);
     gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(f32), raw_data(vertices), gl.STATIC_DRAW)
+    
+    delete(vertices)
 
     if(quad_ebo == 0){
-        indices  := make([dynamic]u32, 0, 98304)
-        for i :u32= 0; i < 98304; i += 4{
+        EBO_SIZE :: CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 6 * 6
+        indices  := make([dynamic]u32, 0, EBO_SIZE)
+        for i :u32= 0; i < EBO_SIZE; i += 4{
             append(&indices, i, i+1, i+2, i+2, i+1, i+3)
         }
         gl.GenBuffers(1, &quad_ebo)
         gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, quad_ebo)
         gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices) * size_of(u32), raw_data(indices), gl.STATIC_DRAW)
+
+        delete(indices)
     }
 
 
@@ -170,7 +180,6 @@ chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32)
 
 
 
-CHUNK_SIZE :: 16
 
 chunk_render:: proc"c"(chunk : ^chunk){
     // core.log(.DEBUG, "VAO: %i, %i, %i, %i", chunk.vao, chunk.offset.x, chunk.offset.y, chunk.offset.z)

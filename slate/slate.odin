@@ -104,7 +104,7 @@ core_interface :: struct{
     task_add_once       : proc"c"(name: string, pool: string, task: task_proc, user_data: rawptr,  dependencies: []string),
     //MISC 
     on_quit             : proc"c"(callback : proc"c"(status : int)),
-    quit                : proc"c"(status: int) 
+    quit                : proc"c"(status: int) -> ! 
 }
 
 
@@ -124,6 +124,10 @@ quit_callbacks: [dynamic]proc"c"(int)
 @private 
 core_context  : runtime.Context
 
+when ODIN_DEBUG{
+    @private
+    track: mem.Tracking_Allocator
+}
 @private
 main :: proc() {
     log_level = .DEBUG
@@ -132,7 +136,6 @@ main :: proc() {
     })
 
     when ODIN_DEBUG{
-        track: mem.Tracking_Allocator
         mem.tracking_allocator_init(&track, context.allocator)
         context.allocator = mem.tracking_allocator(&track)
     }
@@ -140,6 +143,7 @@ main :: proc() {
     when ODIN_OPTIMIZATION_MODE == .Speed || ODIN_OPTIMIZATION_MODE == .Aggressive{
         config_set({"log_level", "WARNING"})
     }
+    core_context = context
 
     interface = (core_interface){
         size_of(core_interface),
@@ -254,17 +258,13 @@ main :: proc() {
     }
     task_runner_thread(&task_pools["main"])
 
-    when ODIN_DEBUG{
-        for _, leak in track.allocation_map {
-            console_log(.DEBUG,"%v leaked %m\n", leak.location, leak.size)
-        }
-    }
+
 }
 
 
 @private
 task_add_pool :: proc"c"(name: string, threads: u32){
-    context = runtime.default_context()
+    context = core_context
     console_log(.INFO, "creating pool %s with %i threads", name, threads)
 
     task_pools[name] = {}
@@ -279,7 +279,7 @@ task_add_pool :: proc"c"(name: string, threads: u32){
 }
 
 task_pool_run :: proc "c"(pool : ^task_pool){
-    context = runtime.default_context()
+    context = core_context
     for _, i in pool.threads{
         pool.threads[i] = thread.create_and_start_with_data(pool, task_runner_thread)
 	}
@@ -287,33 +287,34 @@ task_pool_run :: proc "c"(pool : ^task_pool){
 
 @private
 task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, user_data: rawptr, repeat: bool,  dependencies: []string){
-    context = runtime.default_context()
+    context = core_context
     
     if(task == nil){
         console_log(.ERROR, "Null procedure in task '%s', pool %s", name, pool)
         return
     }
     tpool := &task_pools[pool]
+    name := strings.clone(name)
     
     sync.guard(&tpool.mutex) 
     tpool.tasks[name] = {
-        name=strings.clone(name),
+        name=name,
         status=.WAITING,
         repeatable=repeat,
         allocator=context.allocator,
         user_data=user_data,
-        procedure=task,
+        procedure=task, 
         dependencies=slice.clone(dependencies)
     }
 
-    topological_sort.add_key(&tpool.task_sorter, tpool.tasks[name].name)
+    topological_sort.add_key(&tpool.task_sorter, name)
     tpool.is_sorted = false
     if(dependencies != nil){
         for dependency in tpool.tasks[name].dependencies{
             if !(dependency in tpool.tasks){
                 console_log(.WARNING, "task '%s' depends on unknown task '%s'", name, dependency)
             }
-            topological_sort.add_dependency(&tpool.task_sorter, tpool.tasks[name].name, dependency)
+            topological_sort.add_dependency(&tpool.task_sorter, name, dependency)
         }
     }else{
         // append(&tpool.tasks_sorted, tpool.tasks[name].name)
@@ -347,6 +348,7 @@ task_execute :: proc(pool: ^task_pool){
     
     if !pool.is_sorted{
         pool.is_sorted = true 
+        delete(pool.tasks_sorted)
         pool.tasks_sorted, _ = topological_sort.sort(&pool.task_sorter)
 
         for key, &relation in pool.task_sorter.relations{
@@ -355,11 +357,6 @@ task_execute :: proc(pool: ^task_pool){
                 dependent_relation.dependencies += 1
             }
         }
-        // console_log(.DEBUG, "index %i", pool.task_index)
-        // for name in pool.tasks_sorted{
-        //     console_log(.DEBUG, "%s \t- %s", name, pool.tasks[name].status==.WAITING?"waiting":pool.tasks[name].status==.RUNNING?"running":"done")
-        // }
-        // console_log(.DEBUG, "-----------------")
     }
     if len(pool.tasks_sorted) == 0 do return
     
@@ -407,7 +404,6 @@ task_execute :: proc(pool: ^task_pool){
                 task.status = .WAITING
                 continue
             }    
-            console_log(.DEBUG, "deleting task %s", name)
             relations := &pool.task_sorter.relations[name]
             for key, _ in relations.dependents{
                 (&pool.task_sorter.relations[key]).dependencies -= 1
@@ -433,7 +429,7 @@ task_execute :: proc(pool: ^task_pool){
 config_set :: proc"c"(cfg : config) {
     @(static) mutex : sync.Mutex
     sync.guard(&mutex)
-    context = runtime.default_context()
+    context = core_context
     if str, is_string := cfg.value.(string); is_string{
         configuration[strings.clone(cfg.key)] = {cfg.key, strings.clone(str)} 
         return
@@ -500,7 +496,7 @@ console_log :: proc"c"(category: log_category, format: string, args: ..any, modu
         return
     }
 
-    context = runtime.default_context()
+    context = core_context
     output_file := os.stderr
     prefix := ""
     hour, min, second := time.clock(time.now())
@@ -540,7 +536,7 @@ c_console_log :: proc"c"(category: log_category, text: cstring){
         return
     }
 
-    context = runtime.default_context()
+    context = core_context
     output_file := os.stderr
     prefix := ""
     hour, min, second := time.clock(time.now())
@@ -588,7 +584,7 @@ code_inject :: proc"c"(file: os.Handle, offset: i64 , padding: int, procedure: u
         0xc3
     } 
     
-    context = runtime.default_context()
+    context = core_context
     os.seek(file, offset, os.SEEK_SET)
     os.write(file, call_code)
     for i := 0; i < padding; i+=1{
@@ -598,17 +594,17 @@ code_inject :: proc"c"(file: os.Handle, offset: i64 , padding: int, procedure: u
 
 @private 
 on_quit :: proc"c"(callback : proc"c"(status : int)){
-    context = runtime.default_context()
+    context = core_context
     append(&quit_callbacks, callback)
 }
 
 
 @private
-quit :: proc"c"(status: int){ 
-
+quit :: proc"c"(status: int) -> !{ 
+    context = core_context
     console_log(.INFO, "saving configuration...")
     {
-        context = runtime.default_context()
+        context = core_context
 
         config_file, error := os.open("config.txt", os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0o777)
         if error == os.ERROR_NONE{
@@ -617,7 +613,7 @@ quit :: proc"c"(status: int){
                 switch c in config.value{
                     case i64:    fmt.fprintfln(config_file, "%s=%l", key, c)
                     case f64:    fmt.fprintfln(config_file, "%s=%f", key, c)
-                    case bool:   fmt.fprintfln(config_file, "%s=%s", key, c?"true":"")
+                    case bool:   fmt.fprintfln(config_file, "%s=%s", key, c?"true":"false")
                     case string: fmt.fprintfln(config_file, "%s=%s", key, c)
                 }
             }
@@ -625,9 +621,30 @@ quit :: proc"c"(status: int){
         }else{
             console_log(.ERROR, "could not open config.txt file, %i", os.get_last_error())
         }
-    }
+    } 
     for callback in quit_callbacks{
         callback(status)
+    }
+
+    for key, &pool in task_pools{
+        pool.is_running = false
+        time.sleep(30 * time.Millisecond)
+        for key, task in pool.tasks{
+            delete(task.name)
+            delete(task.dependencies)
+        }
+        topological_sort.destroy(&pool.task_sorter)
+        delete(pool.tasks)
+        delete(pool.tasks_sorted)
+        delete(pool.threads)
+    }
+    delete(task_pools)
+    
+
+    when ODIN_DEBUG{
+        for _, leak in track.allocation_map {
+            console_log(.DEBUG,"%v leaked %m\n", leak.location, leak.size)
+        }
     }
 
     os.exit(status)        

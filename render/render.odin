@@ -7,6 +7,7 @@ import "base:runtime"
 import "core:math"
 
 import "core:os"
+import "core:mem"
 import "core:fmt"
 import "core:time"
 import "vendor:sdl2"
@@ -76,23 +77,16 @@ render_interface :: struct{
 
 
 
-chunk:: struct{
-    vao, vbo  : u32,
-    offset    : [3]i32,
-    transform : glm.mat4,    
-}
 
 
 
 
 @export
 load :: proc"c"(core : ^slate.core_interface) -> slate.version{
-    context = runtime.default_context()
     core.task_add_pool("render", 1)
     core.task_add_once("render/start", "render", start, nil, nil)
     core.task_add_repeated("render/input", "render", input, nil, {"render/start"})
     core.task_add_repeated("render/render", "render", render, nil, {"render/input"})
-
 
     return {0, 0, 1}
 }
@@ -110,6 +104,11 @@ main_camera : camera
 
 last_frame_time    : u64
 current_frame_time : u64
+
+
+when ODIN_DEBUG{
+    track: mem.Tracking_Allocator
+}
 
 camera_update :: proc"c"(camera : ^camera, delta_time : f32) -> glm.mat4{
 
@@ -134,7 +133,14 @@ camera_update :: proc"c"(camera : ^camera, delta_time : f32) -> glm.mat4{
 
 
 start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
-    context = runtime.default_context()
+    context = runtime.default_context() 
+
+    when ODIN_DEBUG{
+        mem.tracking_allocator_init(&track, context.allocator)
+        context.allocator = mem.tracking_allocator(&track)
+    }
+
+
     render_context = context
 
     core = core_interface
@@ -152,7 +158,7 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
     sdl2.GL_SetAttribute(sdl2.GLattr.DEPTH_SIZE, 24)
     
     window_name := core.config_get_string("render/window/name", "Slate")
-    window_width := core.config_get_int("render/window/width", 800)
+    window_width := core.config_get_int("render/window/width", 1200)
     window_height := core.config_get_int("render/window/height", 800)
 
     window = sdl2.CreateWindow(strings.clone_to_cstring(window_name, context.temp_allocator), sdl2.WINDOWPOS_CENTERED, sdl2.WINDOWPOS_CENTERED, i32(window_width), i32(window_height), sdl2.WINDOW_RESIZABLE | sdl2.WINDOW_OPENGL)
@@ -265,37 +271,38 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
 	}
     
 
-    sdl2.SetRelativeMouseMode(true)
+    // sdl2.SetRelativeMouseMode(true)
     main_camera = {{0, 8, 0}, {0, 0, 0}, -90, 0, 90}
 
 
 
     test_world := world.world_get("")
     
-    for x :i32= 0; x < 2; x+=1{
-        for y :i32= 0; y < 2; y+=1{
-            for z :i32= 0; z < 2; z+=1{
+    WORLD_SIZE :: 2
+
+    for x :i32= -WORLD_SIZE; x < WORLD_SIZE; x+=1{
+        for y :i32= 0; y < 4; y+=1{
+            for z :i32= -WORLD_SIZE; z < WORLD_SIZE; z+=1{ 
+
                 world.chunk_load(test_world, {x, y, z}, 
                     proc"c"(current_world : ^world_interface.world, position : [3]i32) { 
                         context = render_context
                         task_data := new(struct{world: ^world_interface.world, pos: [3]i32})
                         task_data.world = current_world
                         task_data.pos = position
-                        
-                        chunk_mesh(current_world, position) 
-                        // core.log(.DEBUG, "meshing chunk [%i, %i, %i]", position.x, position.y, position.z)  
-                        // core.task_add_once(fmt.aprintf("render/mesh_chunk[%i,%i,%i]", position.x, position.y, position.z),
-                                // "render", chunk_mesh_task, task_data, nil)
-                        // 
+                        task_name := fmt.aprintf("render/mesh_chunk[%i,%i,%i]", position.x, position.y, position.z)
+                        core.task_add_once(task_name,
+                                "render", chunk_mesh_task, task_data, nil)
+                        delete(task_name)
                     }
                 )
+
             }
         }
     }
 }
 
 input :: proc"c"(core : ^slate.core_interface, data: rawptr){ 
-    core.log(.DEBUG, "idoso")
     event: sdl2.Event
     for ;sdl2.PollEvent(&event);{
         #partial switch(event.type){
@@ -370,7 +377,6 @@ testAabb :: proc"contextless"(MPV: glm.mat4, min, max: glm.vec3) -> bool{
 
  
 render :: proc"c"(core : ^slate.core_interface, data: rawptr){
-
     last_frame_time = current_frame_time 
     current_frame_time = sdl2.GetPerformanceCounter()
     
@@ -428,12 +434,12 @@ render :: proc"c"(core : ^slate.core_interface, data: rawptr){
    
     proj_view := projection * view
     for key, &chunk in chunk_map{
-        // if(world_interface.chunk_to_block(key))
+        minC := CHUNK_SIZE * glm.vec3{f32(key.x), f32(key.y), f32(key.z)}
+		maxC := minC + CHUNK_SIZE
+        middle := minC + CHUNK_SIZE/2
 
-        minC := 16 * glm.vec3{f32(key.x), f32(key.y), f32(key.z)}
-		maxC := minC + glm.vec3{16, 16, 16}
 
-        if testAabb(proj_view, minC, maxC) {
+        if glm.distance(main_camera.position, middle) < 512 && testAabb(proj_view, minC, maxC) {
             chunk_render(&chunk) 
         }
     } 
@@ -459,11 +465,32 @@ render_chunks :: proc"c"(core : ^slate.core_interface){
 quit :: proc"c"(status : int){
     core.log(.INFO, "shutting down renderer")
 
+    context = render_context
+
+    for pos, &chunk in chunk_map{
+        gl.DeleteBuffers(1, &chunk.vbo)
+        gl.DeleteVertexArrays(1, &chunk.vao)
+    }
+    delete(chunk_map)
+    gl.DeleteBuffers(1, &quad_ebo)
+    
+    for key, value in test_shader_uniforms{
+        delete(key)
+    }
+    delete(test_shader_uniforms)
+
     imgui_opengl.Shutdown()
     imgui_sdl2.Shutdown()
     imgui.DestroyContext()
     sdl2.GL_DeleteContext(gl_context)
     sdl2.DestroyWindow(window)
     sdl2.Quit()
+
+    
+    when ODIN_DEBUG{
+        for _, leak in track.allocation_map {
+            core.log(.DEBUG,"%v leaked %m\n", leak.location, leak.size)
+        }
+    }
 
 }

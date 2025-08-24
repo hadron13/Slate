@@ -4,7 +4,7 @@ block_id  :: u32
 block_pos :: [3]i32
 chunk_pos :: [3]i32
 
-CHUNK_SIZE :: 16
+CHUNK_SIZE :: 32
 
 
 version :: struct{
