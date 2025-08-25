@@ -23,6 +23,19 @@ chunk:: struct{
     transform : glm.mat4,    
 }
 
+direction :: enum{
+    NORTH,
+    SOUTH,
+    UP,
+    DOWN,
+    EAST,
+    WEST
+}
+
+
+
+
+
 chunk_map : map[[3]i32]chunk
 quad_ebo : u32
 
@@ -50,6 +63,77 @@ chunk_mesh_task :: proc"c"(core : ^slate.core_interface, data : rawptr){
     
     free(task_data)
 }
+
+
+// ambient_occlusion :: proc"c"(pos : [3]i32, face : [3] i32, blocks: ^[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE]u32) -> (ao: [2][2]f32){
+//
+//     front := pos + face
+//        
+//     if(front.x == -1 || front.y == -1 || front.z == -1) do return
+//     if(front.x == CHUNK_SIZE || front.y == CHUNK_SIZE || front.z == CHUNK_SIZE) do return
+//
+//     
+//     
+//
+//     if((front.y == 0) || blocks[front.x][front.y-1][front.z] != 0){
+//         ao[0][0] += 0.5
+//         ao[1][0] += 0.5
+//     }
+//     if(front.y == CHUNK_SIZE-1 || blocks[front.x][front.y+1][front.z] != 0){
+//         ao[0][1] += 0.5
+//         ao[1][1] += 0.5
+//     }
+//     if((front.z == 0) || blocks[front.x][front.y][front.z-1] != 0){
+//         ao[0][0] += 0.5
+//         ao[0][1] += 0.5
+//     }
+//     if((front.z == CHUNK_SIZE-1) || blocks[front.x][front.y][front.z+1] != 0){
+//         ao[1][0] += 0.5
+//         ao[1][1] += 0.5
+//     }
+//     if((front.y == 0) || (front.z == 0) || blocks[front.x][front.y-1][front.z-1] != 0){
+//         ao[0][0] += 0.5
+//     }
+//     if((front.y == CHUNK_SIZE-1) || (front.z == 0) || blocks[front.x][front.y+1][front.z-1] != 0){
+//         ao[0][1] += 0.5
+//     }
+//     if((front.y == 0) || (front.z == CHUNK_SIZE-1) || blocks[front.x][front.y-1][front.z+1] != 0){
+//         ao[1][0] += 0.5
+//     }
+//     if((front.y == CHUNK_SIZE-1) || (front.z == CHUNK_SIZE-1) || blocks[front.x][front.y+1][front.z+1] != 0){
+//         ao[1][1] += 0.5
+//     }
+//
+//     return 
+//
+// }
+
+ambient_occlusion :: proc"c"(pos, side1, side2, corner : [3]i32, blocks: ^[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE]u32) -> f32{
+   
+    side1_pos := pos + side1
+    side2_pos := pos + side2
+    corner_pos := pos + corner
+
+    has_side1 := side1_pos.x == -1           || side1_pos.y == -1         || side1_pos.z ==-1 || 
+                 side1_pos.x == CHUNK_SIZE   || side1_pos.y == CHUNK_SIZE || side1_pos.z == CHUNK_SIZE ||
+                 blocks[side1_pos.x][side1_pos.y][side1_pos.z] != 0
+    
+    has_side2 := side2_pos.x == -1         || side2_pos.y == -1         || side2_pos.z == -1 || 
+                 side2_pos.x == CHUNK_SIZE || side2_pos.y == CHUNK_SIZE || side2_pos.z == CHUNK_SIZE ||
+                 blocks[side2_pos.x][side2_pos.y][side2_pos.z] != 0
+
+    has_corner :=corner_pos.x == -1         || corner_pos.y == -1            || corner_pos.z == -1 || 
+                 corner_pos.x == CHUNK_SIZE || corner_pos.y == CHUNK_SIZE || corner_pos.z == CHUNK_SIZE ||
+                 blocks[corner_pos.x][corner_pos.y][corner_pos.z] != 0
+
+
+    if(has_side1 && has_side2){
+        return 1.0
+    }
+
+    return ((has_side1?1.0:0.0) + (has_side2?1.0:0.0) + (has_corner?1.0:0.0))/2.0
+}
+
 
 chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32) { 
     context = render_context
@@ -87,9 +171,9 @@ chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32)
         }
     }
 
-    for x := 0; x < CHUNK_SIZE ; x+=1{
-        for y := 0; y < CHUNK_SIZE ; y+=1{
-            for z := 0; z < CHUNK_SIZE ; z+=1{ 
+    for x :i32= 0; x < CHUNK_SIZE ; x+=1{
+        for y :i32= 0; y < CHUNK_SIZE ; y+=1{
+            for z :i32= 0; z < CHUNK_SIZE ; z+=1{ 
                 if blocks[x][y][z] == 0 do continue 
 
                 tex_id := cast(f32)blocks[x][y][z] -1
@@ -97,22 +181,22 @@ chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32)
 
                 if (x == 0) || blocks[x-1][y][z] == 0{
                                           //X  Y  Z                 U  V    ID    ambient occlusion
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id, ao_map[x][y]  [z]  }, 
-                                           {0, 1, 0,                0, 1, tex_id, ao_map[x][y+1][z]  },
-                                           {0, 0, 1,                1, 0, tex_id, ao_map[x][y]  [z+1]},
-                                           {0, 1, 1,                1, 1, tex_id, ao_map[x][y+1][z+1]})
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id, ambient_occlusion({x,y,z}, {-1,-1,0}, {-1,0,-1}, {-1,-1,-1}, blocks)}, 
+                                           {0, 1, 0,                0, 1, tex_id, ambient_occlusion({x,y,z}, {-1, 1,0}, {-1,0,-1}, {-1, 1,-1}, blocks)},
+                                           {0, 0, 1,                1, 0, tex_id, ambient_occlusion({x,y,z}, {-1,-1,0}, {-1,0, 1}, {-1,-1, 1}, blocks)},
+                                           {0, 1, 1,                1, 1, tex_id, ambient_occlusion({x,y,z}, {-1, 1,0}, {-1,0, 1}, {-1, 1, 1}, blocks)})
                 }
                 if y == 0 || blocks[x][y-1][z] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id, ao_map[x]  [y][z]  },
-                                           {0, 0, 1,                0, 1, tex_id, ao_map[x]  [y][z+1]}, 
-                                           {1, 0, 0,                1, 0, tex_id, ao_map[x+1][y][z]  }, 
-                                           {1, 0, 1,                1, 1, tex_id, ao_map[x+1][y][z+1]})
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 0, 0, tex_id, ambient_occlusion({x,y,z}, {-1,-1, 0}, {0,-1,-1}, {-1,-1,-1}, blocks)},
+                                           {0, 0, 1,                0, 1, tex_id, ambient_occlusion({x,y,z}, { 0,-1, 1}, {-1,-1,0}, {-1,-1, 1}, blocks)}, 
+                                           {1, 0, 0,                1, 0, tex_id, ambient_occlusion({x,y,z}, { 1,-1, 0}, {0,-1,-1}, { 1,-1,-1}, blocks)}, 
+                                           {1, 0, 1,                1, 1, tex_id, ambient_occlusion({x,y,z}, { 1,-1, 0}, {0,-1, 1}, { 1,-1, 1}, blocks)})
                 }
                 if z == 0 || blocks[x][y][z-1] == 0{
-                    append_quad(&vertices, {f32(x), f32(y), f32(z), 1, 0, tex_id, ao_map[x][y][z]}, 
-                                           {1, 0, 0,                0, 0, tex_id, ao_map[x+1][y][z]}, 
-                                           {0, 1, 0,                1, 1, tex_id, ao_map[x][y+1][z]}, 
-                                           {1, 1, 0,                0, 1, tex_id, ao_map[x+1][y+1][z]})
+                    append_quad(&vertices, {f32(x), f32(y), f32(z), 1, 0, tex_id, ambient_occlusion({x,y,z}, {-1, 0,-1}, {0,-1,-1}, {-1,-1,-1}, blocks)}, 
+                                           {1, 0, 0,                0, 0, tex_id, ambient_occlusion({x,y,z}, { 1, 0,-1}, {0,-1,-1}, { 1,-1,-1}, blocks)}, 
+                                           {0, 1, 0,                1, 1, tex_id, ambient_occlusion({x,y,z}, { 0, 1,-1}, {-1,0,-1}, {-1, 1,-1}, blocks)}, 
+                                           {1, 1, 0,                0, 1, tex_id, ambient_occlusion({x,y,z}, { 1, 0,-1}, {0, 1,-1}, { 1, 1,-1}, blocks)})
                 }
 
                 if x == CHUNK_SIZE-1 || blocks[x+1][y][z] == 0{
