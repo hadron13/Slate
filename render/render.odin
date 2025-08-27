@@ -272,17 +272,16 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
     
 
     // sdl2.SetRelativeMouseMode(true)
-    main_camera = {{0, 8, 0}, {0, 0, 0}, -90, 0, 90}
-
+    main_camera = {{0, 32, 0}, {0, 0, 0}, -90, 0, 90}
 
 
     test_world := world.world_get("")
     
-    WORLD_SIZE :: 2
+    WORLD_SIZE :: 20
 
-    for x :i32= -WORLD_SIZE; x < WORLD_SIZE; x+=1{
-        for y :i32= 0; y < 4; y+=1{
-            for z :i32= -WORLD_SIZE; z < WORLD_SIZE; z+=1{ 
+    for x :i32= 0 ; x < WORLD_SIZE; x+=1{
+        for y :i32= 0; y < 16; y+=1{
+            for z :i32= 0; z < WORLD_SIZE; z+=1{ 
 
                 world.chunk_load(test_world, {x, y, z}, 
                     proc"c"(current_world : ^world_interface.world, position : [3]i32) { 
