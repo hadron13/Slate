@@ -416,10 +416,14 @@ task_execute :: proc(pool: ^task_pool){
         return
     }
     if task_to_run == "" do return
-
+    
+    // start := time.tick_now()
+    
     sync.unlock(&pool.mutex) 
     pool.tasks[task_to_run].procedure(&interface, pool.tasks[task_to_run].user_data)
     sync.lock(&pool.mutex)
+    
+    // console_log(.DEBUG, "%s took %i", task_to_run, time.tick_since(start))
 
     (&pool.tasks[task_to_run]).status = .DONE
 }
