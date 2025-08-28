@@ -169,7 +169,7 @@ main :: proc() {
 
     console_log(.INFO, "starting")
     
-    task_add_pool("main", u32(os.processor_core_count()/2))
+    task_add_pool("main", u32(os.processor_core_count()-1))
     
     cwd := os.get_current_directory()
     

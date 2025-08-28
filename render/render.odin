@@ -1,6 +1,7 @@
 #+private
 package render
 
+import "core:sys/posix"
 import "core:strings"
 import "core:c"
 import "base:runtime"
@@ -278,21 +279,22 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
 
     test_world := world.world_get("")
     
-    WORLD_SIZE :: 8
+    WORLD_SIZE :: 32
 
     for x :i32= -WORLD_SIZE ; x < WORLD_SIZE; x+=1{
         for y :i32= 0; y < 8; y+=1{
             for z :i32= -WORLD_SIZE; z < WORLD_SIZE; z+=1{ 
 
                 world.chunk_load(test_world, {x, y, z}, 
-                    proc"c"(current_world : ^world_interface.world, position : [3]i32) { 
+                    proc"c"(current_world : ^world_interface.world, position : [3]i32) {
                         context = render_context
-                        task_data := new(struct{world: ^world_interface.world, pos: [3]i32})
+                        task_data := new(struct{world: ^world_interface.world, pos: [3]i32, vertices: []f32})
                         task_data.world = current_world
                         task_data.pos = position
-                        task_name := fmt.aprintf("render/mesh_chunk[%i,%i,%i]", position.x, position.y, position.z)
-                        core.task_add_once(task_name,
-                                "render", chunk_mesh_task, task_data, nil)
+                        task_data.vertices = chunk_mesh(current_world, position)
+                        task_name := fmt.aprintf("render/update_chunk[%i,%i,%i]", position.x, position.y, position.z)
+
+                        core.task_add_once(task_name, "render", chunk_update_task, task_data, nil)
                         delete(task_name)
                     }
                 )

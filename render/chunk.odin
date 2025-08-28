@@ -33,9 +33,6 @@ direction :: enum{
 }
 
 
-
-
-
 chunk_map : map[[3]i32]chunk
 quad_ebo : u32
 
@@ -50,13 +47,12 @@ append_quad :: #force_inline proc(vertices : ^[dynamic]f32, a, b, c, d : [7]f32)
     append(vertices, d[0] + a[0], d[1] + a[1], d[2] + a[2], d[3], d[4], d[5], d[6])    
 }
 
-chunk_mesh_task :: proc"c"(core : ^slate.core_interface, data : rawptr){ 
+chunk_update_task :: proc"c"(core : ^slate.core_interface, data : rawptr){ 
     context = render_context
-    task_data := cast(^struct{world : ^world_interface.world, pos: [3]i32}) data
+    task_data := cast(^struct{world : ^world_interface.world, pos: [3]i32, vertices: []f32}) data
     
-    //core.log(.DEBUG, "meshing chunk [%i, %i, %i]", task_data.pos.x, task_data.pos.y, task_data.pos.z)
-
-    chunk_mesh(task_data.world, task_data.pos)
+    // core.log(.DEBUG, "meshing chunk [%i, %i, %i]", task_data.pos.x, task_data.pos.y, task_data.pos.z)
+    chunk_send_data(task_data.world, task_data.pos, task_data.vertices)
     
     free(task_data)
 }
@@ -79,7 +75,7 @@ ambient_occlusion :: proc"c"(pos, side1, side2, corner : [3]i32, chunks : [3][3]
     return ((has_side1?1.0:0.0) + (has_side2?1.0:0.0) + (has_corner?1.0:0.0))/6.0
 }
 
-block_at :: proc"contextless"(pos : [3]i32, chunks : [3][3][3]^world_interface.chunk) -> world_interface.block_id{
+block_at :: #force_inline proc"contextless"(pos : [3]i32, chunks : [3][3][3]^world_interface.chunk) -> world_interface.block_id{
     #no_bounds_check{
         chunk_pos := (pos + CHUNK_SIZE)/CHUNK_SIZE
         block_pos := (pos + CHUNK_SIZE)%CHUNK_SIZE
@@ -89,14 +85,14 @@ block_at :: proc"contextless"(pos : [3]i32, chunks : [3][3][3]^world_interface.c
 
 empty_chunk : world_interface.chunk
 
-chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32) { 
+chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32) -> []f32{ 
     context = render_context
 
     chunks : [3][3][3]^world_interface.chunk
 
     chunks[1][1][1] = world.chunk_get(current_world, position)
     if chunks[1][1][1] == nil{
-        return
+        return nil
     }
 
     for x :i32= 0; x < 3; x+=1{ 
@@ -105,22 +101,13 @@ chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32)
                 chunks[x][y][z] = world.chunk_get(current_world, {position.x+x-1, position.y+y-1, position.z+z-1})
                 if(chunks[x][y][z] == nil){
                     chunks[x][y][z] = &empty_chunk
-                    //core.log(.DEBUG, "chunk [%i,%i,%i] unavailable", x, y, z)
                 }
             }
         }
     }
 
-    chunk_map[position] = {}
-
-    chunk := &chunk_map[position]
-
-    chunk.offset = position
-    chunk.transform = glm.mat4Translate(linalg.to_f32(position * CHUNK_SIZE))
-
     vertices := make([dynamic]f32, 0, 2048 * 3)
     blocks := &(chunks[1][1][1].blocks)
-
 
     for x :i32= 0; x < CHUNK_SIZE ; x+=1{
         for y :i32= 0; y < CHUNK_SIZE ; y+=1{
@@ -171,10 +158,18 @@ chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32)
         }
     }
 
+    return vertices[:]
+}
 
+chunk_send_data :: proc"c"(current_world : ^world_interface.world, position : [3]i32, vertices : []f32){
+    context = render_context
+    chunk_map[position] = {}
 
+    chunk := &chunk_map[position]
 
-
+    chunk.offset = position
+    chunk.transform = glm.mat4Translate(linalg.to_f32(position * CHUNK_SIZE))
+    
     gl.GenVertexArrays(1, &chunk.vao)
     gl.GenBuffers(1, &chunk.vbo)
     
@@ -197,8 +192,6 @@ chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32)
 
         delete(indices)
     }
-
-
     
     gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 7 * size_of(f32), 0)
     gl.EnableVertexAttribArray(0)
@@ -208,10 +201,7 @@ chunk_mesh :: proc"c"(current_world : ^world_interface.world, position : [3]i32)
     gl.EnableVertexAttribArray(2)
 
     gl.BindVertexArray(0)
-
 }
-
-
 
 
 
