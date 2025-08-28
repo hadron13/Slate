@@ -167,13 +167,15 @@ chunk_generate :: proc"c"(seed : i64, position : chunk_pos) -> ^chunk{
             world_x := x + block_position.x 
             world_z := z + block_position.z
             
-            height := compound_noise(seed, 8, f64(world_x)/512, f64(world_z)/512) * 16 
-            height *= 1.0 + height
+            height := compound_noise(seed, 12, f64(world_x)/4096, f64(world_z)/4096)
+            height = 1 - math.abs(height)
+            height *= height
+            height *= 128
 
             for y :i32= 0; y < CHUNK_SIZE ; y+=1{ 
                 world_y := y + block_position.y
-                if(world_y < i32(height) + 10){
-                    chunk.blocks[x][y][z] = (height  > 0.1)?1:2
+                if(world_y < i32(height)){
+                    chunk.blocks[x][y][z] = (height < 24)?2:(height < 48)?3:1
                 } 
             }
         }

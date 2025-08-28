@@ -6,5 +6,5 @@ in float ambientOcclusion;
 uniform sampler2DArray tex;
 
 void main(){
-    gl_FragColor = texture(tex, texCoord) - vec4(vec3(ambientOcclusion), 0.0);
+    gl_FragColor = texture(tex, texCoord) - vec4(vec3(ambientOcclusion*0.3), 0.0);
 }
