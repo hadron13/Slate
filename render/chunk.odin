@@ -83,9 +83,7 @@ block_at :: proc"contextless"(pos : [3]i32, chunks : [3][3][3]^world_interface.c
     #no_bounds_check{
         chunk_pos := (pos + CHUNK_SIZE)/CHUNK_SIZE
         block_pos := (pos + CHUNK_SIZE)%CHUNK_SIZE
-        //core.log(.DEBUG, "[%i,%i,%i] -> chunk[%i,%i,%i].blocks[%i,%i,%i]", pos.x, pos.y, pos.z, chunk_pos.x, chunk_pos.y, chunk_pos.z, block_pos.x, block_pos.y, block_pos.z)
         return chunks[chunk_pos.x][chunk_pos.y][chunk_pos.z].blocks[block_pos.x][block_pos.y][block_pos.z]
-        //return (chunks[1][1][1].blocks[pos.x][pos.y][pos.z])
     }
 }
 

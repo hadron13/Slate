@@ -142,14 +142,21 @@ generate :: proc"c"(core : ^slate.core_interface, data : rawptr){
 
 
 
-compound_noise :: proc(seed: i64, octaves: i32, x, y : f64) -> f32{
+compound_noise :: proc(seed: i64, base_frequency : f32,  octaves: i32, x, y : f64) -> f32{
     
     value : f32 = 0 
-    frequency : f32 = 1
+    frequency : f32 = base_frequency
+    amplitude : f32 = 1
+
 
     for i :i32= 0; i < octaves;i += 1{
+        v := noise.noise_2d(seed, {x,y} * f64(frequency)) 
+        v = 1-math.abs(v)
+        v *= v
+
+        value += v * amplitude
+        amplitude /= 2
         frequency *= 2
-        value += noise.noise_2d(seed, {x * f64(frequency) , y * f64(frequency)}) / frequency
     }
 
     return value
@@ -167,10 +174,8 @@ chunk_generate :: proc"c"(seed : i64, position : chunk_pos) -> ^chunk{
             world_x := x + block_position.x 
             world_z := z + block_position.z
             
-            height := compound_noise(seed, 12, f64(world_x)/4096, f64(world_z)/4096)
-            height = 1 - math.abs(height)
-            height *= height
-            height *= 128
+            height := compound_noise(seed, 1.0/4096, 12, f64(world_x), f64(world_z))
+            height *= 100
 
             for y :i32= 0; y < CHUNK_SIZE ; y+=1{ 
                 world_y := y + block_position.y

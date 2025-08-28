@@ -278,10 +278,10 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
 
     test_world := world.world_get("")
     
-    WORLD_SIZE :: 16
+    WORLD_SIZE :: 8
 
     for x :i32= -WORLD_SIZE ; x < WORLD_SIZE; x+=1{
-        for y :i32= 0; y < 12; y+=1{
+        for y :i32= 0; y < 8; y+=1{
             for z :i32= -WORLD_SIZE; z < WORLD_SIZE; z+=1{ 
 
                 world.chunk_load(test_world, {x, y, z}, 
