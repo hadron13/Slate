@@ -17,6 +17,8 @@ import "core:thread"
 import "core:time"
 import "core:sys/posix"
 
+import "../tracy"
+
 import "base:runtime"
 
 MODULE :: #config(MOD, "Core") 
@@ -131,6 +133,8 @@ when ODIN_DEBUG{
 @private
 main :: proc() {
     log_level = .DEBUG
+    tracy.SetThreadName("main");
+    
     posix.signal(.SIGINT, proc"c"(sig : posix.Signal){
         // quit(-1)
         os.exit(-1)
@@ -336,6 +340,11 @@ task_runner_thread :: proc(pool_ptr : rawptr){
     pool := cast(^task_pool)pool_ptr
     
     console_log(.INFO, "starting thread %i from pool %s", os.current_thread_id(), pool.name)
+    
+    name := fmt.ctprintf("%s:%i", pool.name, os.current_thread_id())
+
+    tracy.SetThreadName(name)
+
     for pool.is_running {
         task_execute(pool)
     }
@@ -422,9 +431,11 @@ task_execute :: proc(pool: ^task_pool){
     if task_to_run == "" do return
     
     // start := time.tick_now()
-    
-    sync.unlock(&pool.mutex) 
-    pool.tasks[task_to_run].procedure(&interface, pool.tasks[task_to_run].user_data)
+    sync.unlock(&pool.mutex)
+    {
+        tracy.ZoneN(fmt.tprintf("Task %s", task_to_run))
+        pool.tasks[task_to_run].procedure(&interface, pool.tasks[task_to_run].user_data)
+    }
     sync.lock(&pool.mutex)
     
     // console_log(.DEBUG, "%s took %i", task_to_run, time.tick_since(start))
@@ -622,7 +633,10 @@ quit :: proc"c"(status: int) -> !{
                     case i64:    fmt.fprintfln(config_file, "%s=%l", key, c)
                     case f64:    fmt.fprintfln(config_file, "%s=%f", key, c)
                     case bool:   fmt.fprintfln(config_file, "%s=%s", key, c?"true":"false")
-                    case string: fmt.fprintfln(config_file, "%s=%s", key, c)
+                    case string: {
+                        fmt.fprintfln(config_file, "%s=%s", key, c)
+                        delete(c)
+                    }
                 }
             }
             os.close(config_file)

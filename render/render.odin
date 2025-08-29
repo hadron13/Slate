@@ -23,6 +23,7 @@ import imgui "imgui"
 import imgui_sdl2 "imgui/imgui_impl_sdl2"
 import imgui_opengl "imgui/imgui_impl_opengl3"
 
+// import "../tracy"
 
 
 MODULE :: #config(MOD, "Render")
@@ -279,7 +280,7 @@ start :: proc"c"(core_interface : ^slate.core_interface, data: rawptr){
 
     test_world := world.world_get("")
     
-    WORLD_SIZE :: 32
+    WORLD_SIZE :: 16
 
     for x :i32= -WORLD_SIZE ; x < WORLD_SIZE; x+=1{
         for y :i32= 0; y < 8; y+=1{
@@ -379,6 +380,9 @@ testAabb :: proc"contextless"(MPV: glm.mat4, min, max: glm.vec3) -> bool{
 
  
 render :: proc"c"(core : ^slate.core_interface, data: rawptr){
+    context = render_context
+    // tracy.FrameMark()
+    // tracy.ZoneN("Render")
     last_frame_time = current_frame_time 
     current_frame_time = sdl2.GetPerformanceCounter()
     
