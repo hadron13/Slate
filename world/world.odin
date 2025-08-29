@@ -38,6 +38,24 @@ core : ^slate.core_interface
 world_context : runtime.Context
 test_world : world 
 
+on_chunk_load_callbacks :       [dynamic]proc"c"(world : ^world, position : chunk_pos)
+on_chunk_modified_callbacks :   [dynamic]proc"c"(world : ^world, position : chunk_pos)
+on_chunk_unload_callbacks :     [dynamic]proc"c"(world : ^world, position : chunk_pos)
+
+
+on_chunk_load :: proc"c"(callback : proc"c"(world : ^world, position : chunk_pos)){
+    context = world_context
+    append(&on_chunk_load_callbacks, callback)
+}
+on_chunk_modified :: proc"c"(callback : proc"c"(world : ^world, position : chunk_pos)){
+    context = world_context
+    append(&on_chunk_unload_callbacks, callback)
+}
+on_chunk_unload :: proc"c"(callback : proc"c"(world : ^world, position : chunk_pos)){
+    context = world_context
+    append(&on_chunk_unload_callbacks, callback)
+}
+
 world_get :: proc"c"(name  : string) -> ^world{
     return &test_world
 }
@@ -64,12 +82,6 @@ chunk_load :: proc"c"(world : ^world, position : chunk_pos, callback : proc"c"(^
     core.task_add_once(fmt.aprintf("world/generate_chunk[%i,%i,%i]", position.x, position.y, position.z),
             "main", chunk_generator_task, task_data, nil)
      
-    // generated_chunk := chunk_generate(test_world.seed, position)
-    // sync.lock(&test_world.lock)
-    // test_world.chunks[position] = generated_chunk
-    // sync.unlock(&test_world.lock)
-    
-    // callback(world, position)
 }
 
 chunk_generator_task :: proc"c"(core : ^slate.core_interface, data : rawptr){
@@ -122,7 +134,10 @@ load :: proc"c"(core_interface : ^slate.core_interface) -> slate.version{
         nil,
         auto_cast chunk_get,
         auto_cast block_get,
-        auto_cast block_set 
+        auto_cast block_set, 
+        auto_cast on_chunk_load, 
+        auto_cast on_chunk_modified, 
+        auto_cast on_chunk_unload, 
     }
 
     core.task_add_once("world/generate", "main", generate, nil, nil)
@@ -174,8 +189,8 @@ chunk_generate :: proc"c"(seed : i64, position : chunk_pos) -> ^chunk{
             world_x := x + block_position.x 
             world_z := z + block_position.z
             
-            height := compound_noise(seed, 1.0/4096, 12, f64(world_x), f64(world_z))
-            height *= 100
+            height := compound_noise(seed, 1.0/1024, 12, f64(world_x), f64(world_z))
+            height *= 48
 
             for y :i32= 0; y < CHUNK_SIZE ; y+=1{ 
                 world_y := y + block_position.y

@@ -33,7 +33,9 @@ world_interface :: struct{
     chunk_get : proc"c"(world : ^world, position : chunk_pos) -> ^chunk,
     block_set : proc"c"(world : ^world, position : block_pos) -> block_id,
     block_get : proc"c"(world : ^world, position : block_pos, id: block_id),
-    
+    on_chunk_load     : proc"c"(callback : proc"c"(world : ^world, position : chunk_pos)),
+    on_chunk_modified : proc"c"(callback : proc"c"(world : ^world, position : chunk_pos)),
+    on_chunk_unload   : proc"c"(callback : proc"c"(world : ^world, position : chunk_pos)),
 }
 
 chunk_to_block :: proc"c"(position : chunk_pos) -> block_pos{

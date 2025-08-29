@@ -132,7 +132,8 @@ when ODIN_DEBUG{
 main :: proc() {
     log_level = .DEBUG
     posix.signal(.SIGINT, proc"c"(sig : posix.Signal){
-        quit(-1)
+        // quit(-1)
+        os.exit(-1)
     })
 
     when ODIN_DEBUG{
@@ -358,7 +359,10 @@ task_execute :: proc(pool: ^task_pool){
             }
         }
     }
-    if len(pool.tasks_sorted) == 0 do return
+    if len(pool.tasks_sorted) == 0 {
+        time.sleep(500 * time.Microsecond)
+        return
+    } 
     
     task_to_run : string = ""
 

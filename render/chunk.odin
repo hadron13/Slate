@@ -18,6 +18,7 @@ import world_interface "../world/interface"
 import "../slate"
 
 chunk:: struct{
+    vertice_count : i32,
     vao, vbo  : u32,
     offset    : [3]i32,
     transform : glm.mat4,    
@@ -169,6 +170,7 @@ chunk_send_data :: proc"c"(current_world : ^world_interface.world, position : [3
 
     chunk.offset = position
     chunk.transform = glm.mat4Translate(linalg.to_f32(position * CHUNK_SIZE))
+    chunk.vertice_count = i32(len(vertices))
     
     gl.GenVertexArrays(1, &chunk.vao)
     gl.GenBuffers(1, &chunk.vbo)
@@ -212,7 +214,7 @@ chunk_render:: proc"c"(chunk : ^chunk){
 
     gl.BindVertexArray(chunk.vao)
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, quad_ebo)
-    gl.DrawElements(gl.TRIANGLES, 98304, gl.UNSIGNED_INT, nil)
+    gl.DrawElements(gl.TRIANGLES, chunk.vertice_count, gl.UNSIGNED_INT, nil)
 
 }
 
