@@ -174,7 +174,7 @@ main :: proc() {
 
     console_log(.INFO, "starting")
     
-    task_add_pool("main", u32(os.processor_core_count()-1))
+    task_add_pool("main", u32(os.processor_core_count()-2))
     
     cwd := os.get_current_directory()
     
@@ -271,7 +271,7 @@ main :: proc() {
 task_add_pool :: proc"c"(name: string, threads: u32){
     context = core_context
     console_log(.INFO, "creating pool %s with %i threads", name, threads)
-
+    
     task_pools[name] = {}
     pool := &task_pools[name]
     pool.name = name 
@@ -313,8 +313,8 @@ task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, user_d
     }
 
     topological_sort.add_key(&tpool.task_sorter, name)
-    tpool.is_sorted = false
     if(dependencies != nil){
+        tpool.is_sorted = false
         for dependency in tpool.tasks[name].dependencies{
             if !(dependency in tpool.tasks){
                 console_log(.WARNING, "task '%s' depends on unknown task '%s'", name, dependency)
@@ -322,7 +322,7 @@ task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, user_d
             topological_sort.add_dependency(&tpool.task_sorter, name, dependency)
         }
     }else{
-        // append(&tpool.tasks_sorted, tpool.tasks[name].name)
+        append(&tpool.tasks_sorted, tpool.tasks[name].name)
     }
 }
 
@@ -358,6 +358,7 @@ task_execute :: proc(pool: ^task_pool){
     
     if !pool.is_sorted{
         pool.is_sorted = true 
+        tracy.ZoneN("Task Sorting")
         delete(pool.tasks_sorted)
         pool.tasks_sorted, _ = topological_sort.sort(&pool.task_sorter)
 
@@ -378,28 +379,31 @@ task_execute :: proc(pool: ^task_pool){
     no_tasks_left := true
     unbroken_done := true
        
+    {
+        tracy.ZoneN("Task Search")
+        
+        task_search:
+        for name in pool.tasks_sorted[pool.task_index:]{
+            task := &pool.tasks[name]
+            if task == nil{
+                console_log(.ERROR, "task %s is null", name)
+                continue 
+            }
+        
+            if task.status == .DONE && unbroken_done{
+                pool.task_index += 1
+            }else do unbroken_done = false
 
-    task_search:
-    for name in pool.tasks_sorted[pool.task_index:]{
-        task := &pool.tasks[name]
-        if task == nil{
-            console_log(.ERROR, "task %s is null", name)
-            continue 
+            if task.status != .WAITING do continue task_search
+            no_tasks_left = false
+
+            for dep in task.dependencies{
+                if pool.tasks[dep].status != .DONE do continue task_search
+            } 
+            task.status = .RUNNING
+            task_to_run = name
+            break
         }
-    
-        if task.status == .DONE && unbroken_done{
-            pool.task_index += 1
-        }else do unbroken_done = false
-
-        if task.status != .WAITING do continue task_search
-        no_tasks_left = false
-
-        for dep in task.dependencies{
-            if pool.tasks[dep].status != .DONE do continue task_search
-        } 
-        task.status = .RUNNING
-        task_to_run = name
-        break
     }
     // console_log(.DEBUG, "------------")
     // console_log(.DEBUG, "pool %s - index %i", pool.name, pool.task_index)

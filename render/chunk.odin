@@ -177,7 +177,7 @@ chunk_send_data :: proc"c"(current_world : ^world_interface.world, position : [3
     
     gl.BindVertexArray(chunk.vao)
 
-    gl.BindBuffer(gl.ARRAY_BUFFER, chunk.vbo);
+    gl.BindBuffer(gl.ARRAY_BUFFER, chunk.vbo)
     gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(f32), raw_data(vertices), gl.STATIC_DRAW)
     
     delete(vertices)
