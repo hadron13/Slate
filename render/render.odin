@@ -381,7 +381,6 @@ testAabb :: proc"contextless"(MPV: glm.mat4, min, max: glm.vec3) -> bool{
  
 render :: proc"c"(core : ^slate.core_interface, data: rawptr){
     context = render_context
-    tracy.ZoneN("Render")
     last_frame_time = current_frame_time 
     current_frame_time = sdl2.GetPerformanceCounter()
     
