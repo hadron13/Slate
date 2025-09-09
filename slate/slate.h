@@ -13,7 +13,6 @@
 #include<stdarg.h>
 
 
-
 typedef struct{
     char *data;
     size_t len;
@@ -65,25 +64,27 @@ typedef struct core_interface_t{
     uint64_t size;
     version_t version;
     //CONFIG
-    void      (*config_set)(config_t cfg);
-    config_t  (*config_get)(string_t key);
-    int64_t   (*config_get_int)(string_t key, int64_t default_);
-    double    (*config_get_float)(string_t key, double default_);
-    string_t  (*config_get_string)(string_t key, string_t default_);
-    bool      (*config_get_bool)(string_t key, bool default_);
+    void      (*config_set)         (config_t cfg);
+    config_t  (*config_get)         (string_t key);
+    int64_t   (*config_get_int)     (string_t key, int64_t default_);
+    double    (*config_get_float)   (string_t key, double default_);
+    string_t  (*config_get_string)  (string_t key, string_t default_);
+    bool      (*config_get_bool)    (string_t key, bool default_);
     //LOGGING   
     void *__odin_console_log; //Odin console_log, do not use in C
     union{
         void (*__console_log)(log_category_t category, char *text); 
-        void (*console_log)(log_category_t category, char *format, ...); 
+        void (*console_log)(log_category_t category, char *format, ...);
     };
     //MODULES
-    module_interface_t (*module_interface)(string_t name);
-    version_t          (*module_version)(string_t name);
+    void                (*module_set_interface)(string_t name, module_interface_t interface);
+    module_interface_t *(*module_get_interface)(string_t name);
+    version_t           (*module_get_version)  (string_t name);
+    void                (*module_reload)       (string_t name);
     //TASKS
-    void (*task_add_pool)(string_t name, uint32_t threads);
-    void (*task_add_repeated)(string_t name, string_t pool,  task_proc_t task, string_array_t dependencies);
-    void (*task_add_once)(string_t name, string_t pool,  task_proc_t task, string_array_t dependencies);
+    void (*task_add_pool)    (string_t name, uint32_t threads);
+    void (*task_add_repeated)(string_t name, string_t pool, task_proc_t task, string_array_t dependencies);
+    void (*task_add_once)    (string_t name, string_t pool, task_proc_t task, string_array_t dependencies);
 }core_interface_t;
 
 
@@ -97,6 +98,5 @@ char *_temp_sprintf(const char *format, ...){
 }
 
 #define console_log(category, format, ...) __console_log(category, _temp_sprintf("[\033[34m%s | %s:\033[35m%d \033[93m%s()\033[0m] "format, MODULE, __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__))
-
 
 #endif

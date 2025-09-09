@@ -17,7 +17,7 @@ import "core:thread"
 import "core:time"
 import "core:sys/posix"
 
-import "../tracy"
+//import "../tracy"
 
 import "base:runtime"
 
@@ -62,7 +62,6 @@ task :: struct{
     name      : string,
     status    : task_status,
     repeatable: bool,
-    allocator : mem.Allocator,
     user_data : rawptr,
     procedure : task_proc, 
     dependencies : []string,
@@ -133,7 +132,7 @@ when ODIN_DEBUG{
 @private
 main :: proc() {
     log_level = .DEBUG
-    tracy.SetThreadName("main");
+    //tracy.SetThreadName("main");
     
     posix.signal(.SIGINT, proc"c"(sig : posix.Signal){
         // quit(-1)
@@ -306,7 +305,6 @@ task_add_internal :: proc"c"(name: string, pool: string, task: task_proc, user_d
         name=name,
         status=.WAITING,
         repeatable=repeat,
-        allocator=context.allocator,
         user_data=user_data,
         procedure=task, 
         dependencies=slice.clone(dependencies)
@@ -343,7 +341,7 @@ task_runner_thread :: proc(pool_ptr : rawptr){
     
     name := fmt.ctprintf("%s:%i", pool.name, os.current_thread_id())
 
-    tracy.SetThreadName(name)
+    //tracy.SetThreadName(name)
 
     for pool.is_running {
         task_execute(pool)
@@ -358,7 +356,7 @@ task_execute :: proc(pool: ^task_pool){
     
     if !pool.is_sorted{
         pool.is_sorted = true 
-        tracy.ZoneN("Task Sorting")
+        //tracy.ZoneN("Task Sorting")
         delete(pool.tasks_sorted)
         pool.tasks_sorted, _ = topological_sort.sort(&pool.task_sorter)
 
@@ -380,7 +378,7 @@ task_execute :: proc(pool: ^task_pool){
     unbroken_done := true
        
     {
-        tracy.ZoneN("Task Search")
+        //tracy.ZoneN("Task Search")
         
         task_search:
         for name in pool.tasks_sorted[pool.task_index:]{
@@ -437,7 +435,7 @@ task_execute :: proc(pool: ^task_pool){
     // start := time.tick_now()
     sync.unlock(&pool.mutex)
     {
-        tracy.ZoneN(fmt.tprintf("Task %s", task_to_run))
+        //tracy.ZoneN(fmt.tprintf("Task %s", task_to_run))
         pool.tasks[task_to_run].procedure(&interface, pool.tasks[task_to_run].user_data)
     }
     sync.lock(&pool.mutex)
